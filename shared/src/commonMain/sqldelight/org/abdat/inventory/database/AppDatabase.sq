@@ -1,3 +1,4 @@
+-- Metadata table for configuration and system state
 CREATE TABLE app_metadata (
     key TEXT NOT NULL PRIMARY KEY,
     value TEXT NOT NULL
@@ -8,3 +9,436 @@ SELECT value FROM app_metadata WHERE key = ?;
 
 setMetadata:
 INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?);
+
+-- ============================================================================
+-- Master Entities
+-- ============================================================================
+
+-- 1. Fournisseur (Supplier)
+CREATE TABLE fournisseur (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    full_name TEXT NOT NULL
+);
+
+-- 2. Convention (Supplier Agreement)
+CREATE TABLE convention (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    fournisseur_id INTEGER NOT NULL REFERENCES fournisseur(id) ON DELETE CASCADE,
+    ord_number INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    global_unit_price REAL NOT NULL DEFAULT 0.0,
+    total_montant REAL NOT NULL DEFAULT 0.0
+);
+
+-- 3. Convention Items (Agreed products under a convention)
+CREATE TABLE convention_item (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    convention_id INTEGER NOT NULL REFERENCES convention(id) ON DELETE CASCADE,
+    designation TEXT NOT NULL,
+    unite TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    min_quantity REAL NOT NULL DEFAULT 0.0
+);
+
+-- 4. Internal Organization: Service (Department)
+CREATE TABLE service (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    local_num TEXT NOT NULL DEFAULT ''
+);
+
+-- 5. Internal Organization: Local (Room/Storage area)
+CREATE TABLE local (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL REFERENCES service(id) ON DELETE CASCADE,
+    name TEXT NOT NULL
+);
+
+-- 6. Stock (Inventory Master)
+CREATE TABLE stock_article (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    code_article TEXT NOT NULL UNIQUE,
+    designation TEXT NOT NULL,
+    unite_quantite TEXT NOT NULL,
+    family TEXT NOT NULL DEFAULT '',
+    sous_family TEXT NOT NULL DEFAULT '',
+    quantity REAL NOT NULL DEFAULT 0.0,
+    unit_price REAL NOT NULL DEFAULT 0.0,
+    expiration_date TEXT,
+    date TEXT NOT NULL
+);
+
+-- ============================================================================
+-- Transaction Documents
+-- ============================================================================
+
+-- 7. Bon de Commande (Purchase Order)
+CREATE TABLE bon_de_commande (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    reference_bon TEXT NOT NULL,
+    fournisseur_id INTEGER NOT NULL REFERENCES fournisseur(id) ON DELETE RESTRICT,
+    date TEXT NOT NULL,
+    is_debt INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE commande_item (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    commande_id INTEGER NOT NULL REFERENCES bon_de_commande(id) ON DELETE CASCADE,
+    convention_item_id INTEGER REFERENCES convention_item(id) ON DELETE SET NULL,
+    code_article TEXT NOT NULL DEFAULT '',
+    designation TEXT NOT NULL,
+    type TEXT NOT NULL,
+    family TEXT NOT NULL DEFAULT '',
+    quantity REAL NOT NULL,
+    unit_price REAL NOT NULL DEFAULT 0.0
+);
+
+-- 8. Bon de Livraison (Delivery Note)
+CREATE TABLE bon_de_livraison (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    reference_bon TEXT NOT NULL,
+    fournisseur_id INTEGER NOT NULL REFERENCES fournisseur(id) ON DELETE RESTRICT,
+    date_livraison TEXT NOT NULL,
+    commande_id INTEGER REFERENCES bon_de_commande(id) ON DELETE SET NULL
+);
+
+CREATE TABLE livraison_item (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    livraison_id INTEGER NOT NULL REFERENCES bon_de_livraison(id) ON DELETE CASCADE,
+    code_article TEXT NOT NULL,
+    designation TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    unit_price REAL NOT NULL DEFAULT 0.0
+);
+
+-- 9. Bon de Sortie (Consumption / Issue Note)
+CREATE TABLE bon_de_sortie (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    reference_bon TEXT NOT NULL,
+    service_id INTEGER NOT NULL REFERENCES service(id) ON DELETE RESTRICT,
+    local_id INTEGER REFERENCES local(id) ON DELETE SET NULL,
+    date TEXT NOT NULL
+);
+
+CREATE TABLE sortie_item (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    sortie_id INTEGER NOT NULL REFERENCES bon_de_sortie(id) ON DELETE CASCADE,
+    code_article TEXT NOT NULL,
+    designation TEXT NOT NULL,
+    quantity REAL NOT NULL
+);
+
+-- ============================================================================
+-- Database Indexes
+-- ============================================================================
+
+CREATE INDEX idx_convention_fournisseur ON convention(fournisseur_id);
+CREATE INDEX idx_convention_item_convention ON convention_item(convention_id);
+CREATE INDEX idx_local_service ON local(service_id);
+CREATE INDEX idx_stock_article_code ON stock_article(code_article);
+CREATE INDEX idx_stock_article_designation ON stock_article(designation);
+CREATE INDEX idx_stock_article_family ON stock_article(family);
+CREATE INDEX idx_commande_fournisseur ON bon_de_commande(fournisseur_id);
+CREATE INDEX idx_commande_item_commande ON commande_item(commande_id);
+CREATE INDEX idx_commande_item_convention ON commande_item(convention_item_id);
+CREATE INDEX idx_livraison_fournisseur ON bon_de_livraison(fournisseur_id);
+CREATE INDEX idx_livraison_item_livraison ON livraison_item(livraison_id);
+CREATE INDEX idx_sortie_service ON bon_de_sortie(service_id);
+CREATE INDEX idx_sortie_item_sortie ON sortie_item(sortie_id);
+
+-- ============================================================================
+-- Utility Queries
+-- ============================================================================
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();
+
+-- ============================================================================
+-- Fournisseur Queries
+-- ============================================================================
+
+selectAllFournisseurs:
+SELECT * FROM fournisseur ORDER BY full_name ASC;
+
+selectFournisseurById:
+SELECT * FROM fournisseur WHERE id = ?;
+
+insertFournisseur:
+INSERT INTO fournisseur (full_name) VALUES (?);
+
+updateFournisseur:
+UPDATE fournisseur SET full_name = ? WHERE id = ?;
+
+deleteFournisseur:
+DELETE FROM fournisseur WHERE id = ?;
+
+-- ============================================================================
+-- Convention & Convention Items Queries
+-- ============================================================================
+
+selectAllConventions:
+SELECT * FROM convention ORDER BY date DESC, ord_number ASC;
+
+selectConventionById:
+SELECT * FROM convention WHERE id = ?;
+
+selectConventionsByFournisseur:
+SELECT * FROM convention WHERE fournisseur_id = ? ORDER BY date DESC;
+
+insertConvention:
+INSERT INTO convention (fournisseur_id, ord_number, date, global_unit_price, total_montant)
+VALUES (?, ?, ?, ?, ?);
+
+updateConvention:
+UPDATE convention 
+SET fournisseur_id = ?, ord_number = ?, date = ?, global_unit_price = ?, total_montant = ? 
+WHERE id = ?;
+
+deleteConvention:
+DELETE FROM convention WHERE id = ?;
+
+selectConventionItemsByConventionId:
+SELECT * FROM convention_item WHERE convention_id = ? ORDER BY designation ASC;
+
+selectConventionItemById:
+SELECT * FROM convention_item WHERE id = ?;
+
+insertConventionItem:
+INSERT INTO convention_item (convention_id, designation, unite, quantity, min_quantity)
+VALUES (?, ?, ?, ?, ?);
+
+updateConventionItem:
+UPDATE convention_item 
+SET designation = ?, unite = ?, quantity = ?, min_quantity = ? 
+WHERE id = ?;
+
+deleteConventionItem:
+DELETE FROM convention_item WHERE id = ?;
+
+-- Quota Balance Queries
+selectConventionItemBalance:
+SELECT 
+    ci.id AS conventionItemId,
+    ci.convention_id AS conventionId,
+    ci.designation AS designation,
+    ci.quantity AS agreedQuantity,
+    ci.min_quantity AS minQuantity,
+    COALESCE(SUM(CASE WHEN bdc.is_debt = 0 THEN co.quantity ELSE 0 END), 0.0) AS orderedQuantity,
+    (ci.quantity - COALESCE(SUM(CASE WHEN bdc.is_debt = 0 THEN co.quantity ELSE 0 END), 0.0)) AS remainingQuantity
+FROM convention_item ci
+LEFT JOIN commande_item co ON co.convention_item_id = ci.id
+LEFT JOIN bon_de_commande bdc ON co.commande_id = bdc.id
+WHERE ci.id = ?
+GROUP BY ci.id;
+
+selectConventionBalancesByConventionId:
+SELECT 
+    ci.id AS conventionItemId,
+    ci.convention_id AS conventionId,
+    ci.designation AS designation,
+    ci.unite AS unite,
+    ci.quantity AS agreedQuantity,
+    ci.min_quantity AS minQuantity,
+    COALESCE(SUM(CASE WHEN bdc.is_debt = 0 THEN co.quantity ELSE 0 END), 0.0) AS orderedQuantity,
+    (ci.quantity - COALESCE(SUM(CASE WHEN bdc.is_debt = 0 THEN co.quantity ELSE 0 END), 0.0)) AS remainingQuantity
+FROM convention_item ci
+LEFT JOIN commande_item co ON co.convention_item_id = ci.id
+LEFT JOIN bon_de_commande bdc ON co.commande_id = bdc.id
+WHERE ci.convention_id = ?
+GROUP BY ci.id
+ORDER BY ci.designation ASC;
+
+-- ============================================================================
+-- Service & Local Queries
+-- ============================================================================
+
+selectAllServices:
+SELECT * FROM service ORDER BY name ASC;
+
+selectServiceById:
+SELECT * FROM service WHERE id = ?;
+
+insertService:
+INSERT INTO service (name, local_num) VALUES (?, ?);
+
+updateService:
+UPDATE service SET name = ?, local_num = ? WHERE id = ?;
+
+deleteService:
+DELETE FROM service WHERE id = ?;
+
+selectAllLocals:
+SELECT * FROM local ORDER BY name ASC;
+
+selectLocalsByServiceId:
+SELECT * FROM local WHERE service_id = ? ORDER BY name ASC;
+
+selectLocalById:
+SELECT * FROM local WHERE id = ?;
+
+insertLocal:
+INSERT INTO local (service_id, name) VALUES (?, ?);
+
+updateLocal:
+UPDATE local SET service_id = ?, name = ? WHERE id = ?;
+
+deleteLocal:
+DELETE FROM local WHERE id = ?;
+
+-- ============================================================================
+-- Stock Inventory Queries
+-- ============================================================================
+
+selectAllStockArticles:
+SELECT * FROM stock_article ORDER BY designation ASC;
+
+selectStockArticleById:
+SELECT * FROM stock_article WHERE id = ?;
+
+selectStockArticleByCode:
+SELECT * FROM stock_article WHERE code_article = ?;
+
+searchStockArticles:
+SELECT * FROM stock_article 
+WHERE designation LIKE ('%' || :query || '%') 
+   OR code_article LIKE ('%' || :query || '%') 
+   OR family LIKE ('%' || :query || '%') 
+ORDER BY designation ASC;
+
+selectLowStockArticles:
+SELECT s.*, ci.min_quantity AS alert_threshold
+FROM stock_article s
+JOIN convention_item ci ON s.designation = ci.designation
+WHERE s.quantity <= ci.min_quantity;
+
+insertStockArticle:
+INSERT INTO stock_article (code_article, designation, unite_quantite, family, sous_family, quantity, unit_price, expiration_date, date)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateStockArticle:
+UPDATE stock_article 
+SET code_article = ?, designation = ?, unite_quantite = ?, family = ?, sous_family = ?, quantity = ?, unit_price = ?, expiration_date = ?, date = ? 
+WHERE id = ?;
+
+deleteStockArticle:
+DELETE FROM stock_article WHERE id = ?;
+
+-- Atomic Stock Mutations
+increaseStockQuantity:
+UPDATE stock_article 
+SET quantity = quantity + ?, date = ? 
+WHERE code_article = ?;
+
+decreaseStockQuantity:
+UPDATE stock_article 
+SET quantity = quantity - ?, date = ? 
+WHERE code_article = ?;
+
+insertOrReplaceStockArticle:
+INSERT OR REPLACE INTO stock_article (id, code_article, designation, unite_quantite, family, sous_family, quantity, unit_price, expiration_date, date)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- ============================================================================
+-- Bon de Commande Queries
+-- ============================================================================
+
+selectAllCommandes:
+SELECT * FROM bon_de_commande ORDER BY date DESC;
+
+selectCommandeById:
+SELECT * FROM bon_de_commande WHERE id = ?;
+
+selectCommandesByFournisseur:
+SELECT * FROM bon_de_commande WHERE fournisseur_id = ? ORDER BY date DESC;
+
+insertCommande:
+INSERT INTO bon_de_commande (reference_bon, fournisseur_id, date, is_debt)
+VALUES (?, ?, ?, ?);
+
+updateCommande:
+UPDATE bon_de_commande 
+SET reference_bon = ?, fournisseur_id = ?, date = ?, is_debt = ? 
+WHERE id = ?;
+
+deleteCommande:
+DELETE FROM bon_de_commande WHERE id = ?;
+
+selectCommandeItemsByCommandeId:
+SELECT * FROM commande_item WHERE commande_id = ? ORDER BY designation ASC;
+
+insertCommandeItem:
+INSERT INTO commande_item (commande_id, convention_item_id, code_article, designation, type, family, quantity, unit_price)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteCommandeItem:
+DELETE FROM commande_item WHERE id = ?;
+
+-- ============================================================================
+-- Bon de Livraison Queries
+-- ============================================================================
+
+selectAllLivraisons:
+SELECT * FROM bon_de_livraison ORDER BY date_livraison DESC;
+
+selectLivraisonById:
+SELECT * FROM bon_de_livraison WHERE id = ?;
+
+selectLivraisonsByFournisseur:
+SELECT * FROM bon_de_livraison WHERE fournisseur_id = ? ORDER BY date_livraison DESC;
+
+insertLivraison:
+INSERT INTO bon_de_livraison (reference_bon, fournisseur_id, date_livraison, commande_id)
+VALUES (?, ?, ?, ?);
+
+updateLivraison:
+UPDATE bon_de_livraison 
+SET reference_bon = ?, fournisseur_id = ?, date_livraison = ?, commande_id = ? 
+WHERE id = ?;
+
+deleteLivraison:
+DELETE FROM bon_de_livraison WHERE id = ?;
+
+selectLivraisonItemsByLivraisonId:
+SELECT * FROM livraison_item WHERE livraison_id = ? ORDER BY designation ASC;
+
+insertLivraisonItem:
+INSERT INTO livraison_item (livraison_id, code_article, designation, quantity, unit_price)
+VALUES (?, ?, ?, ?, ?);
+
+deleteLivraisonItem:
+DELETE FROM livraison_item WHERE id = ?;
+
+-- ============================================================================
+-- Bon de Sortie Queries
+-- ============================================================================
+
+selectAllSorties:
+SELECT * FROM bon_de_sortie ORDER BY date DESC;
+
+selectSortieById:
+SELECT * FROM bon_de_sortie WHERE id = ?;
+
+selectSortiesByServiceId:
+SELECT * FROM bon_de_sortie WHERE service_id = ? ORDER BY date DESC;
+
+insertSortie:
+INSERT INTO bon_de_sortie (reference_bon, service_id, local_id, date)
+VALUES (?, ?, ?, ?);
+
+updateSortie:
+UPDATE bon_de_sortie 
+SET reference_bon = ?, service_id = ?, local_id = ?, date = ? 
+WHERE id = ?;
+
+deleteSortie:
+DELETE FROM bon_de_sortie WHERE id = ?;
+
+selectSortieItemsBySortieId:
+SELECT * FROM sortie_item WHERE sortie_id = ? ORDER BY designation ASC;
+
+insertSortieItem:
+INSERT INTO sortie_item (sortie_id, code_article, designation, quantity)
+VALUES (?, ?, ?, ?);
+
+deleteSortieItem:
+DELETE FROM sortie_item WHERE id = ?;
