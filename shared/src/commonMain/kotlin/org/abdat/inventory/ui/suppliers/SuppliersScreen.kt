@@ -59,12 +59,88 @@ fun SuppliersScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-    ) {
-        // Top Header
+    val selectedConv = state.selectedConventionForDetail
+    val selectedSupplier = state.selectedSupplier
+
+    if (state.isProfileViewOpen && selectedSupplier != null) {
+        SupplierProfileScreen(
+            supplier = selectedSupplier,
+            conventions = state.conventions,
+            historyItems = state.historyItems,
+            isEditDialogOpen = state.isEditProfileDialogOpen,
+            onBack = { viewModel.closeSupplierProfile() },
+            onOpenEdit = { viewModel.openEditProfileDialog() },
+            onCloseEdit = { viewModel.closeEditProfileDialog() },
+            onSaveProfile = { fullName, societe, phone, responsablePhone, ville, email, otherLinks ->
+                viewModel.updateSupplierProfile(
+                    id = selectedSupplier.id,
+                    fullName = fullName,
+                    societe = societe,
+                    phone = phone,
+                    responsablePhone = responsablePhone,
+                    ville = ville,
+                    email = email,
+                    otherLinks = otherLinks
+                )
+            },
+            modifier = modifier
+        )
+    } else if (selectedConv != null && selectedSupplier != null) {
+        val balances = state.conventionBalances[selectedConv.id] ?: emptyList()
+        ConventionDetailScreen(
+            convention = selectedConv,
+            supplier = selectedSupplier,
+            balances = balances,
+            onBack = { viewModel.closeConventionDetail() },
+            onOpenAddArticle = { viewModel.openAddArticleDialog() },
+            onEditArticle = { viewModel.requestEditArticle(it) },
+            modifier = modifier
+        )
+
+        if (state.isAddArticleDialogOpen) {
+            AddArticleToConventionDialog(
+                convention = selectedConv,
+                supplier = selectedSupplier,
+                onDismiss = { viewModel.closeAddArticleDialog() },
+                onConfirm = { des, unit, qty, minQty ->
+                    viewModel.addArticleToConvention(selectedConv.id, des, unit, qty, minQty)
+                }
+            )
+        }
+
+        if (state.isSensitiveWarningDialogOpen && state.articlePendingEdit != null) {
+            SensitiveEditWarningDialog(
+                article = state.articlePendingEdit!!,
+                convention = selectedConv,
+                onDismiss = { viewModel.dismissSensitiveWarning() },
+                onConfirm = { viewModel.confirmSensitiveWarning() }
+            )
+        }
+
+        if (state.isEditArticleDialogOpen && state.articlePendingEdit != null) {
+            EditConventionArticleDialog(
+                article = state.articlePendingEdit!!,
+                convention = selectedConv,
+                onDismiss = { viewModel.closeEditArticleDialog() },
+                onConfirm = { des, unit, qty, minQty ->
+                    viewModel.updateConventionArticle(
+                        itemId = state.articlePendingEdit!!.conventionItemId,
+                        conventionId = selectedConv.id,
+                        designation = des,
+                        unite = unit,
+                        quantity = qty,
+                        minQuantity = minQty
+                    )
+                }
+            )
+        }
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        ) {
+            // Top Header
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -270,7 +346,10 @@ fun SuppliersScreen(
 
                             // Quick metrics badges
                             val totalCeilingDzd = state.conventions.sumOf { it.totalMontant }
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Box(
                                     modifier = Modifier
                                         .background(MaterialTheme.colorScheme.surfaceContainerLow, RoundedCornerShape(8.dp))
@@ -281,6 +360,14 @@ fun SuppliersScreen(
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary
                                     )
+                                }
+
+                                Button(
+                                    onClick = { viewModel.openSupplierProfile() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text("👤 Fiche / Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
                                 }
                             }
                         }
@@ -303,7 +390,8 @@ fun SuppliersScreen(
                         when (state.activeTab) {
                             SupplierDetailTab.CONVENTIONS -> ConventionsTabView(
                                 conventions = state.conventions,
-                                balances = state.conventionBalances
+                                balances = state.conventionBalances,
+                                onSelectConvention = { viewModel.selectConventionForDetail(it) }
                             )
                             SupplierDetailTab.ARTICLES -> ReferencedArticlesTabView(
                                 balances = state.conventionBalances
@@ -318,12 +406,15 @@ fun SuppliersScreen(
             }
         }
     }
+    }
 
     // Dialogs
     if (state.isAddSupplierDialogOpen) {
         AddSupplierDialog(
             onDismiss = { viewModel.closeAddSupplierDialog() },
-            onConfirm = { viewModel.addSupplier(it) }
+            onConfirm = { name, societe, phone, ville ->
+                viewModel.addSupplierFull(name = name, societe = societe, phone = phone, ville = ville)
+            }
         )
     }
 
@@ -381,9 +472,18 @@ private fun SupplierCardItem(
                         .background(AppTheme.colors.statusSuccess, CircleShape)
                 )
             }
+            if (supplier.societe.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "🏢 ${supplier.societe}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = AppTheme.colors.textPrimary
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Fournisseur Officiel • NIF / RC Algérie",
+                text = if (supplier.ville.isNotBlank()) "📍 ${supplier.ville} • Réf: FRN-${supplier.id.toString().padStart(4, '0')}"
+                else "Fournisseur Officiel • Réf: FRN-${supplier.id.toString().padStart(4, '0')}",
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTheme.colors.textSecondary
             )
@@ -394,7 +494,8 @@ private fun SupplierCardItem(
 @Composable
 private fun ConventionsTabView(
     conventions: List<org.abdat.inventory.domain.model.Convention>,
-    balances: Map<Long, List<ConventionQuotaBalance>>
+    balances: Map<Long, List<ConventionQuotaBalance>>,
+    onSelectConvention: (org.abdat.inventory.domain.model.Convention) -> Unit
 ) {
     if (conventions.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -408,7 +509,10 @@ private fun ConventionsTabView(
             items(conventions, key = { it.id }) { conv ->
                 val convBalances = balances[conv.id] ?: emptyList()
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSelectConvention(conv) },
                     shape = RoundedCornerShape(8.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -431,11 +535,27 @@ private fun ConventionsTabView(
                                     color = AppTheme.colors.textSecondary
                                 )
                             }
-                            AppBadge(
-                                text = "ACTIVE",
-                                containerColor = AppTheme.colors.statusSuccessContainer,
-                                contentColor = AppTheme.colors.onStatusSuccess
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AppBadge(
+                                    text = "ACTIVE",
+                                    containerColor = AppTheme.colors.statusSuccessContainer,
+                                    contentColor = AppTheme.colors.onStatusSuccess
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Gérer les articles →",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -657,27 +777,63 @@ private fun EvaluationScoreCard(
 @Composable
 private fun AddSupplierDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (fullName: String, societe: String, phone: String, ville: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var societe by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var ville by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ajouter un Nouveau Fournisseur", fontWeight = FontWeight.Bold) },
         text = {
-            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+            Column(
+                modifier = Modifier.padding(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nom ou Raison Sociale (ex: SARL BIOPHARM)") },
+                    label = { Text("Nom ou Contact Principal *") },
+                    placeholder = { Text("ex: SARL BIOPHARM ALGERIE") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = societe,
+                    onValueChange = { societe = it },
+                    label = { Text("Société / Raison Sociale") },
+                    placeholder = { Text("ex: BIOPHARM SPA") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("Téléphone") },
+                        placeholder = { Text("021 98 00 00") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = ville,
+                        onValueChange = { ville = it },
+                        label = { Text("Ville / Lieu") },
+                        placeholder = { Text("Alger") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { if (name.isNotBlank()) onConfirm(name) }
+                onClick = { if (name.isNotBlank()) onConfirm(name, societe, phone, ville) }
             ) {
                 Text("Ajouter")
             }

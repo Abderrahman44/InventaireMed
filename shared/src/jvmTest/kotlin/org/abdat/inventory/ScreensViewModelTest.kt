@@ -12,7 +12,9 @@ import org.abdat.inventory.ui.suppliers.SuppliersViewModel
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ScreensViewModelTest {
@@ -170,5 +172,188 @@ class ScreensViewModelTest {
         viewModel.onFilterChange(OrderStatusFilter.VALIDATED)
         val filteredState = viewModel.uiState.value
         assertTrue(filteredState.filteredOrders.all { it.statusLabel.contains("Validé") })
+    }
+
+    @Test
+    fun testAddArticleToExistingConvention() {
+        val suppliersVm = SuppliersViewModel(database)
+        val supplier = suppliersVm.uiState.value.suppliers.first()
+        suppliersVm.selectSupplier(supplier)
+
+        val conv = suppliersVm.uiState.value.conventions.first()
+        suppliersVm.selectConventionForDetail(conv)
+
+        assertEquals(conv.id, suppliersVm.uiState.value.selectedConventionForDetail?.id)
+
+        val initialCount = suppliersVm.uiState.value.conventionBalances[conv.id]?.size ?: 0
+
+        // Append new article to the active convention
+        suppliersVm.addArticleToConventionSync(
+            conventionId = conv.id,
+            designation = "Bétadine Dermique 10%",
+            unite = "FLACON",
+            quantity = 400.0,
+            minQuantity = 20.0
+        )
+
+        val updatedBalances = suppliersVm.uiState.value.conventionBalances[conv.id]
+        assertNotNull(updatedBalances)
+        assertEquals(initialCount + 1, updatedBalances.size)
+
+        val newArticleBalance = updatedBalances.firstOrNull { it.designation == "Bétadine Dermique 10%" }
+        assertNotNull(newArticleBalance)
+        assertEquals("FLACON", newArticleBalance.unite)
+        assertEquals(400.0, newArticleBalance.agreedQuantity)
+        assertEquals(400.0, newArticleBalance.remainingQuantity)
+        assertEquals(20.0, newArticleBalance.minQuantity)
+    }
+
+    @Test
+    fun testSensitiveEditArticleWorkflow() {
+        val suppliersVm = SuppliersViewModel(database)
+        val supplier = suppliersVm.uiState.value.suppliers.first()
+        suppliersVm.selectSupplier(supplier)
+
+        val conv = suppliersVm.uiState.value.conventions.first()
+        suppliersVm.selectConventionForDetail(conv)
+
+        val article = suppliersVm.uiState.value.conventionBalances[conv.id]!!.first()
+
+        // 1. User requests edit -> sensitive warning alert opens
+        suppliersVm.requestEditArticle(article)
+        val warningState = suppliersVm.uiState.value
+        assertTrue(warningState.isSensitiveWarningDialogOpen)
+        assertFalse(warningState.isEditArticleDialogOpen)
+        assertEquals(article.conventionItemId, warningState.articlePendingEdit?.conventionItemId)
+
+        // 2. User confirms sensitive alert -> edit dialog opens
+        suppliersVm.confirmSensitiveWarning()
+        val editState = suppliersVm.uiState.value
+        assertFalse(editState.isSensitiveWarningDialogOpen)
+        assertTrue(editState.isEditArticleDialogOpen)
+
+        // 3. User saves modifications
+        val newQuota = article.agreedQuantity + 250.0
+        suppliersVm.updateConventionArticleSync(
+            itemId = article.conventionItemId,
+            conventionId = conv.id,
+            designation = "${article.designation} (Avenant)",
+            unite = article.unite,
+            quantity = newQuota,
+            minQuantity = 15.0
+        )
+
+        val finalState = suppliersVm.uiState.value
+        assertFalse(finalState.isEditArticleDialogOpen)
+
+        val updatedArticle = finalState.conventionBalances[conv.id]!!
+            .first { it.conventionItemId == article.conventionItemId }
+
+        assertEquals("${article.designation} (Avenant)", updatedArticle.designation)
+        assertEquals(newQuota, updatedArticle.agreedQuantity)
+        assertEquals(15.0, updatedArticle.minQuantity)
+
+        // 4. Test back navigation to suppliers overview
+        suppliersVm.closeConventionDetail()
+        assertNull(suppliersVm.uiState.value.selectedConventionForDetail)
+    }
+
+    @Test
+    fun testSupplierProfileDetailsInspectionAndSeeding() {
+        val suppliersVm = SuppliersViewModel(database)
+        val state = suppliersVm.uiState.value
+
+        val biopharm = state.suppliers.firstOrNull { it.fullName.contains("BIOPHARM", ignoreCase = true) }
+        assertNotNull(biopharm, "Expected BIOPHARM supplier in seeded database")
+        assertEquals("Biopharm Distribution Logistique SPA", biopharm.societe)
+        assertEquals("+213 21 78 90 12", biopharm.phone)
+        assertEquals("+213 661 45 67 89", biopharm.responsablePhone)
+        assertEquals("Oued Smar, Alger", biopharm.ville)
+        assertEquals("commandes@biopharm-dz.com", biopharm.email)
+        assertEquals("wa.me/213661456789 | t.me/BiopharmSupply", biopharm.otherLinks)
+    }
+
+    @Test
+    fun testSupplierProfileNavigationAndEditWorkflow() {
+        val suppliersVm = SuppliersViewModel(database)
+        val initialSupplier = suppliersVm.uiState.value.suppliers.first()
+        suppliersVm.selectSupplier(initialSupplier)
+
+        // 1. Open profile screen
+        suppliersVm.openSupplierProfile()
+        assertTrue(suppliersVm.uiState.value.isProfileViewOpen)
+        assertFalse(suppliersVm.uiState.value.isEditProfileDialogOpen)
+
+        // 2. Open edit profile dialog
+        suppliersVm.openEditProfileDialog()
+        assertTrue(suppliersVm.uiState.value.isEditProfileDialogOpen)
+
+        // 3. Save profile updates
+        suppliersVm.updateSupplierProfileSync(
+            id = initialSupplier.id,
+            fullName = "SARL INNOMED HEALTHCARE",
+            societe = "INNOMED ALGERIE SPA",
+            phone = "023 45 67 89",
+            responsablePhone = "0661 99 88 77",
+            ville = "Blida (Zone Industrielle)",
+            email = "contact@innomed.dz",
+            otherLinks = "@innomed_dz_telegram"
+        )
+
+        val updatedState = suppliersVm.uiState.value
+        assertFalse(updatedState.isEditProfileDialogOpen)
+
+        // Verify selected supplier reflects update
+        val updatedSelected = updatedState.selectedSupplier
+        assertNotNull(updatedSelected)
+        assertEquals("SARL INNOMED HEALTHCARE", updatedSelected.fullName)
+        assertEquals("INNOMED ALGERIE SPA", updatedSelected.societe)
+        assertEquals("023 45 67 89", updatedSelected.phone)
+        assertEquals("0661 99 88 77", updatedSelected.responsablePhone)
+        assertEquals("Blida (Zone Industrielle)", updatedSelected.ville)
+        assertEquals("contact@innomed.dz", updatedSelected.email)
+        assertEquals("@innomed_dz_telegram", updatedSelected.otherLinks)
+
+        // Verify direct DB query reflects update
+        val dbRecord = database.appDatabaseQueries.selectFournisseurById(initialSupplier.id).executeAsOne()
+        assertEquals("SARL INNOMED HEALTHCARE", dbRecord.full_name)
+        assertEquals("INNOMED ALGERIE SPA", dbRecord.societe)
+        assertEquals("023 45 67 89", dbRecord.phone)
+        assertEquals("0661 99 88 77", dbRecord.responsable_phone)
+        assertEquals("Blida (Zone Industrielle)", dbRecord.ville)
+        assertEquals("contact@innomed.dz", dbRecord.email)
+        assertEquals("@innomed_dz_telegram", dbRecord.other_links)
+
+        // 4. Close profile view
+        suppliersVm.closeSupplierProfile()
+        assertFalse(suppliersVm.uiState.value.isProfileViewOpen)
+    }
+
+    @Test
+    fun testAddSupplierWithFullDetails() {
+        val suppliersVm = SuppliersViewModel(database)
+        val initialCount = suppliersVm.uiState.value.suppliers.size
+
+        suppliersVm.addSupplierFullSync(
+            name = "LABORATOIRES MERCK ALGERIE",
+            societe = "MERCK SANTE SPA",
+            phone = "021 54 32 10",
+            responsablePhone = "0770 11 22 33",
+            ville = "Oran",
+            email = "info@merck.dz",
+            otherLinks = "https://t.me/merck_algerie"
+        )
+
+        val newState = suppliersVm.uiState.value
+        assertEquals(initialCount + 1, newState.suppliers.size)
+
+        val created = newState.suppliers.firstOrNull { it.fullName == "LABORATOIRES MERCK ALGERIE" }
+        assertNotNull(created)
+        assertEquals("MERCK SANTE SPA", created.societe)
+        assertEquals("021 54 32 10", created.phone)
+        assertEquals("0770 11 22 33", created.responsablePhone)
+        assertEquals("Oran", created.ville)
+        assertEquals("info@merck.dz", created.email)
+        assertEquals("https://t.me/merck_algerie", created.otherLinks)
     }
 }

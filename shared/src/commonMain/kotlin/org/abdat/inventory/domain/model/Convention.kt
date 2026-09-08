@@ -5,7 +5,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Fournisseur(
     val id: Long = 0,
-    val fullName: String
+    val fullName: String,
+    val societe: String = "",
+    val phone: String = "",
+    val responsablePhone: String = "",
+    val ville: String = "",
+    val email: String = "",
+    val otherLinks: String = ""
 )
 
 @Serializable

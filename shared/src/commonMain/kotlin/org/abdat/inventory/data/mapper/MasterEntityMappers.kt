@@ -15,12 +15,24 @@ import org.abdat.inventory.domain.model.StockArticle
 
 fun DbFournisseur.toDomain(): Fournisseur = Fournisseur(
     id = id,
-    fullName = full_name
+    fullName = full_name,
+    societe = societe,
+    phone = phone,
+    responsablePhone = responsable_phone,
+    ville = ville,
+    email = email,
+    otherLinks = other_links
 )
 
 fun Fournisseur.toDb(): DbFournisseur = DbFournisseur(
     id = id,
-    full_name = fullName
+    full_name = fullName,
+    societe = societe,
+    phone = phone,
+    responsable_phone = responsablePhone,
+    ville = ville,
+    email = email,
+    other_links = otherLinks
 )
 
 fun DbConvention.toDomain(items: List<ConventionItem> = emptyList()): Convention = Convention(

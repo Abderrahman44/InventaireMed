@@ -17,7 +17,13 @@ INSERT OR REPLACE INTO app_metadata(key, value) VALUES (?, ?);
 -- 1. Fournisseur (Supplier)
 CREATE TABLE fournisseur (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    full_name TEXT NOT NULL
+    full_name TEXT NOT NULL,
+    societe TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    responsable_phone TEXT NOT NULL DEFAULT '',
+    ville TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    other_links TEXT NOT NULL DEFAULT ''
 );
 
 -- 2. Convention (Supplier Agreement)
@@ -166,8 +172,23 @@ SELECT * FROM fournisseur WHERE id = ?;
 insertFournisseur:
 INSERT INTO fournisseur (full_name) VALUES (?);
 
+insertFournisseurFull:
+INSERT INTO fournisseur (full_name, societe, phone, responsable_phone, ville, email, other_links)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
 updateFournisseur:
 UPDATE fournisseur SET full_name = ? WHERE id = ?;
+
+updateFournisseurProfile:
+UPDATE fournisseur
+SET full_name = ?,
+    societe = ?,
+    phone = ?,
+    responsable_phone = ?,
+    ville = ?,
+    email = ?,
+    other_links = ?
+WHERE id = ?;
 
 deleteFournisseur:
 DELETE FROM fournisseur WHERE id = ?;

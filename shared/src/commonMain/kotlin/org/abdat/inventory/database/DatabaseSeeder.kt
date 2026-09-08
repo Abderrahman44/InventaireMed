@@ -85,13 +85,37 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
         )
 
         // 2. Seed Suppliers
-        database.appDatabaseQueries.insertFournisseur("SARL ALGÉRIE MÉDICAL TECH")
+        database.appDatabaseQueries.insertFournisseurFull(
+            full_name = "SARL ALGÉRIE MÉDICAL TECH",
+            societe = "Algérie Médical Technologies SARL",
+            phone = "+213 23 45 67 89",
+            responsable_phone = "+213 550 12 34 56",
+            ville = "Alger (Hydra)",
+            email = "contact@algeriemedtech.dz",
+            other_links = "wa.me/213550123456 | t.me/AlgerieMedTech"
+        )
         val idFrn1 = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
-        database.appDatabaseQueries.insertFournisseur("BIOPHARM DISTRIBUTION SPA")
+        database.appDatabaseQueries.insertFournisseurFull(
+            full_name = "BIOPHARM DISTRIBUTION SPA",
+            societe = "Biopharm Distribution Logistique SPA",
+            phone = "+213 21 78 90 12",
+            responsable_phone = "+213 661 45 67 89",
+            ville = "Oued Smar, Alger",
+            email = "commandes@biopharm-dz.com",
+            other_links = "wa.me/213661456789 | t.me/BiopharmSupply"
+        )
         val idFrn2 = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
-        database.appDatabaseQueries.insertFournisseur("GROUPE SAIDAL PHARMA SPA")
+        database.appDatabaseQueries.insertFournisseurFull(
+            full_name = "GROUPE SAIDAL PHARMA SPA",
+            societe = "Groupe Saidal Production & Distribution SPA",
+            phone = "+213 21 64 22 00",
+            responsable_phone = "+213 770 98 76 54",
+            ville = "Constantine / Alger",
+            email = "direction.commerciale@saidal.dz",
+            other_links = "wa.me/213770987654 | t.me/SaidalPharma"
+        )
         val idFrn3 = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
         // 3. Seed Conventions with Multiple Articles

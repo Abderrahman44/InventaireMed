@@ -56,8 +56,15 @@ data class SuppliersUiState(
     val conventions: List<Convention> = emptyList(),
     val conventionBalances: Map<Long, List<ConventionQuotaBalance>> = emptyMap(),
     val historyItems: List<SupplierHistoryItem> = emptyList(),
+    val selectedConventionForDetail: Convention? = null,
+    val isProfileViewOpen: Boolean = false,
+    val isEditProfileDialogOpen: Boolean = false,
     val isAddSupplierDialogOpen: Boolean = false,
     val isAddConventionDialogOpen: Boolean = false,
+    val isAddArticleDialogOpen: Boolean = false,
+    val isSensitiveWarningDialogOpen: Boolean = false,
+    val isEditArticleDialogOpen: Boolean = false,
+    val articlePendingEdit: ConventionQuotaBalance? = null,
     val isLoading: Boolean = false
 )
 
@@ -197,11 +204,33 @@ class SuppliersViewModel(
         }
         history.sortByDescending { it.date }
 
+        val currentDetailConvId = _uiState.value.selectedConventionForDetail?.id
+        val updatedDetailConv = if (currentDetailConvId != null) {
+            domainConventions.firstOrNull { it.id == currentDetailConvId }
+        } else null
+
         _uiState.update {
             it.copy(
                 conventions = domainConventions,
                 conventionBalances = balancesMap,
-                historyItems = history
+                historyItems = history,
+                selectedConventionForDetail = updatedDetailConv ?: it.selectedConventionForDetail
+            )
+        }
+    }
+
+    fun selectConventionForDetail(convention: Convention) {
+        _uiState.update { it.copy(selectedConventionForDetail = convention) }
+    }
+
+    fun closeConventionDetail() {
+        _uiState.update {
+            it.copy(
+                selectedConventionForDetail = null,
+                isAddArticleDialogOpen = false,
+                isSensitiveWarningDialogOpen = false,
+                isEditArticleDialogOpen = false,
+                articlePendingEdit = null
             )
         }
     }
@@ -214,12 +243,112 @@ class SuppliersViewModel(
         _uiState.update { it.copy(isAddSupplierDialogOpen = false) }
     }
 
+    fun openSupplierProfile() {
+        _uiState.update { it.copy(isProfileViewOpen = true) }
+    }
+
+    fun closeSupplierProfile() {
+        _uiState.update { it.copy(isProfileViewOpen = false, isEditProfileDialogOpen = false) }
+    }
+
+    fun openEditProfileDialog() {
+        _uiState.update { it.copy(isEditProfileDialogOpen = true) }
+    }
+
+    fun closeEditProfileDialog() {
+        _uiState.update { it.copy(isEditProfileDialogOpen = false) }
+    }
+
+    fun updateSupplierProfile(
+        id: Long,
+        fullName: String,
+        societe: String = "",
+        phone: String = "",
+        responsablePhone: String = "",
+        ville: String = "",
+        email: String = "",
+        otherLinks: String = ""
+    ) {
+        viewModelScope.launch {
+            updateSupplierProfileSync(
+                id = id,
+                fullName = fullName,
+                societe = societe,
+                phone = phone,
+                responsablePhone = responsablePhone,
+                ville = ville,
+                email = email,
+                otherLinks = otherLinks
+            )
+        }
+    }
+
+    fun updateSupplierProfileSync(
+        id: Long,
+        fullName: String,
+        societe: String = "",
+        phone: String = "",
+        responsablePhone: String = "",
+        ville: String = "",
+        email: String = "",
+        otherLinks: String = ""
+    ) {
+        database.appDatabaseQueries.updateFournisseurProfile(
+            full_name = fullName.trim(),
+            societe = societe.trim(),
+            phone = phone.trim(),
+            responsable_phone = responsablePhone.trim(),
+            ville = ville.trim(),
+            email = email.trim(),
+            other_links = otherLinks.trim(),
+            id = id
+        )
+        closeEditProfileDialog()
+        loadSuppliersSync()
+    }
+
     fun addSupplier(name: String) {
         addSupplierSync(name)
     }
 
     fun addSupplierSync(name: String) {
         database.appDatabaseQueries.insertFournisseur(name.trim())
+        closeAddSupplierDialog()
+        loadSuppliersSync()
+    }
+
+    fun addSupplierFull(
+        name: String,
+        societe: String = "",
+        phone: String = "",
+        responsablePhone: String = "",
+        ville: String = "",
+        email: String = "",
+        otherLinks: String = ""
+    ) {
+        viewModelScope.launch {
+            addSupplierFullSync(name, societe, phone, responsablePhone, ville, email, otherLinks)
+        }
+    }
+
+    fun addSupplierFullSync(
+        name: String,
+        societe: String = "",
+        phone: String = "",
+        responsablePhone: String = "",
+        ville: String = "",
+        email: String = "",
+        otherLinks: String = ""
+    ) {
+        database.appDatabaseQueries.insertFournisseurFull(
+            full_name = name.trim(),
+            societe = societe.trim(),
+            phone = phone.trim(),
+            responsable_phone = responsablePhone.trim(),
+            ville = ville.trim(),
+            email = email.trim(),
+            other_links = otherLinks.trim()
+        )
         closeAddSupplierDialog()
         loadSuppliersSync()
     }
@@ -269,5 +398,117 @@ class SuppliersViewModel(
         }
         closeAddConventionDialog()
         loadSupplierDetailsSync(currentSupplier.id)
+    }
+
+    fun openAddArticleDialog() {
+        _uiState.update { it.copy(isAddArticleDialogOpen = true) }
+    }
+
+    fun closeAddArticleDialog() {
+        _uiState.update { it.copy(isAddArticleDialogOpen = false) }
+    }
+
+    fun addArticleToConvention(
+        conventionId: Long,
+        designation: String,
+        unite: String,
+        quantity: Double,
+        minQuantity: Double = 5.0
+    ) {
+        viewModelScope.launch {
+            addArticleToConventionSync(conventionId, designation, unite, quantity, minQuantity)
+        }
+    }
+
+    fun addArticleToConventionSync(
+        conventionId: Long,
+        designation: String,
+        unite: String,
+        quantity: Double,
+        minQuantity: Double = 5.0
+    ) {
+        database.appDatabaseQueries.insertConventionItem(
+            convention_id = conventionId,
+            designation = designation.trim(),
+            unite = unite.trim(),
+            quantity = quantity,
+            min_quantity = minQuantity
+        )
+        closeAddArticleDialog()
+        val supplierId = _uiState.value.selectedSupplier?.id
+        if (supplierId != null) {
+            loadSupplierDetailsSync(supplierId)
+        }
+    }
+
+    fun requestEditArticle(article: ConventionQuotaBalance) {
+        _uiState.update {
+            it.copy(
+                articlePendingEdit = article,
+                isSensitiveWarningDialogOpen = true
+            )
+        }
+    }
+
+    fun dismissSensitiveWarning() {
+        _uiState.update {
+            it.copy(
+                isSensitiveWarningDialogOpen = false,
+                articlePendingEdit = null
+            )
+        }
+    }
+
+    fun confirmSensitiveWarning() {
+        _uiState.update {
+            it.copy(
+                isSensitiveWarningDialogOpen = false,
+                isEditArticleDialogOpen = true
+            )
+        }
+    }
+
+    fun closeEditArticleDialog() {
+        _uiState.update {
+            it.copy(
+                isEditArticleDialogOpen = false,
+                articlePendingEdit = null
+            )
+        }
+    }
+
+    fun updateConventionArticle(
+        itemId: Long,
+        conventionId: Long,
+        designation: String,
+        unite: String,
+        quantity: Double,
+        minQuantity: Double = 5.0
+    ) {
+        viewModelScope.launch {
+            updateConventionArticleSync(itemId, conventionId, designation, unite, quantity, minQuantity)
+        }
+    }
+
+    fun updateConventionArticleSync(
+        itemId: Long,
+        conventionId: Long,
+        designation: String,
+        unite: String,
+        quantity: Double,
+        minQuantity: Double = 5.0
+    ) {
+        database.appDatabaseQueries.updateConventionItem(
+            id = itemId,
+            designation = designation.trim(),
+            unite = unite.trim(),
+            quantity = quantity,
+            min_quantity = minQuantity
+        )
+        closeEditArticleDialog()
+        val supplierId = _uiState.value.selectedSupplier?.id
+        if (supplierId != null) {
+            loadSupplierDetailsSync(supplierId)
+        }
     }
 }
