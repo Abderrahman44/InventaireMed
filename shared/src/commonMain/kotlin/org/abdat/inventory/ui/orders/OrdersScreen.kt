@@ -25,6 +25,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -38,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,12 +49,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.abdat.inventory.domain.model.Convention
 import org.abdat.inventory.domain.model.Fournisseur
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.suppliers.ConventionQuotaBalance
 
 @Composable
 fun OrdersScreen(
@@ -349,10 +353,16 @@ fun OrdersScreen(
         }
     }
 
-    // New Order Dialog
+    // New Order Dialog with Convention & Article Selection
     if (state.isNewOrderDialogOpen) {
         NewOrderDialog(
             suppliers = state.suppliers,
+            conventions = state.conventionsForSupplier,
+            conventionArticles = state.articlesForConvention,
+            selectedSupplierId = state.selectedSupplierId,
+            selectedConventionId = state.selectedConventionId,
+            onSupplierChange = { viewModel.selectSupplierForNewOrder(it) },
+            onConventionChange = { viewModel.selectConventionForNewOrder(it) },
             onDismiss = { viewModel.closeNewOrderDialog() },
             onConfirm = { ref, supplierId, date, isDebt, items ->
                 viewModel.createOrder(ref, supplierId, date, isDebt, items)
@@ -365,34 +375,75 @@ fun OrdersScreen(
 @Composable
 private fun NewOrderDialog(
     suppliers: List<Fournisseur>,
+    conventions: List<Convention>,
+    conventionArticles: List<ConventionQuotaBalance>,
+    selectedSupplierId: Long?,
+    selectedConventionId: Long?,
+    onSupplierChange: (Long) -> Unit,
+    onConventionChange: (Long) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (String, Long, String, Boolean, List<OrderDraftItem>) -> Unit
 ) {
     var ref by remember { mutableStateOf("BC-2026-${(1000..9999).random()}") }
-    var selectedSupplier by remember { mutableStateOf(suppliers.firstOrNull()) }
     var expandedSupplierDropdown by remember { mutableStateOf(false) }
+    var expandedConventionDropdown by remember { mutableStateOf(false) }
+    var expandedArticleDropdown by remember { mutableStateOf(false) }
+
     var date by remember { mutableStateOf("2026-09-08") }
     var isDebt by remember { mutableStateOf(false) }
 
-    var itemDesignation by remember { mutableStateOf("") }
-    var itemQtyText by remember { mutableStateOf("50") }
-    var itemPriceText by remember { mutableStateOf("1200") }
+    // Multi-line items in draft
+    val draftItems = remember { mutableStateListOf<OrderDraftItem>() }
+
+    // Current article selector fields
+    var selectedArticle by remember { mutableStateOf<ConventionQuotaBalance?>(null) }
+    var itemQtyText by remember { mutableStateOf("10") }
+
+    val currentSupplier = suppliers.firstOrNull { it.id == selectedSupplierId } ?: suppliers.firstOrNull()
+    val currentConvention = conventions.firstOrNull { it.id == selectedConventionId } ?: conventions.firstOrNull()
+
+    // Quota validation
+    val enteredQty = itemQtyText.toDoubleOrNull() ?: 0.0
+    val isOverQuota = selectedArticle != null && !isDebt && enteredQty > selectedArticle!!.remainingQuantity
+
+    val totalOrderAmount = draftItems.sumOf { it.subtotal }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Créer un Nouveau Bon de Commande", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                "Créer un Bon de Commande (Sélection Convention & Articles)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
+            )
+        },
         text = {
             Column(
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedTextField(
-                    value = ref,
-                    onValueChange = { ref = it },
-                    label = { Text("N° Référence (ex: BC-2026-0842)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Header Info: Reference and Date
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = ref,
+                        onValueChange = { ref = it },
+                        label = { Text("N° Référence") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1.2f)
+                    )
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = { date = it },
+                        label = { Text("Date (AAAA-MM-JJ)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
                 // Supplier Dropdown
                 ExposedDropdownMenuBox(
@@ -400,12 +451,12 @@ private fun NewOrderDialog(
                     onExpandedChange = { expandedSupplierDropdown = it }
                 ) {
                     OutlinedTextField(
-                        value = selectedSupplier?.fullName ?: "Sélectionner Fournisseur",
+                        value = currentSupplier?.fullName ?: "Sélectionner Fournisseur",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Fournisseur") },
+                        label = { Text("1. Fournisseur") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedSupplierDropdown) },
-                        modifier = Modifier.menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
                     )
                     ExposedDropdownMenu(
                         expanded = expandedSupplierDropdown,
@@ -415,7 +466,8 @@ private fun NewOrderDialog(
                             DropdownMenuItem(
                                 text = { Text(supplier.fullName) },
                                 onClick = {
-                                    selectedSupplier = supplier
+                                    onSupplierChange(supplier.id)
+                                    selectedArticle = null
                                     expandedSupplierDropdown = false
                                 }
                             )
@@ -423,47 +475,234 @@ private fun NewOrderDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Date (AAAA-MM-JJ)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Convention Dropdown
+                if (conventions.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = expandedConventionDropdown,
+                        onExpandedChange = { expandedConventionDropdown = it }
+                    ) {
+                        OutlinedTextField(
+                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - Plafond ${currentConvention.totalMontant.toLong()} DZD" else "Sélectionner Convention",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("2. Convention-Cadre Active") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedConventionDropdown) },
+                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedConventionDropdown,
+                            onDismissRequest = { expandedConventionDropdown = false }
+                        ) {
+                            conventions.forEach { conv ->
+                                DropdownMenuItem(
+                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - Plafond: ${conv.totalMontant.toLong()} DZD") },
+                                    onClick = {
+                                        onConventionChange(conv.id)
+                                        selectedArticle = null
+                                        expandedConventionDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = AppTheme.colors.statusWarningContainer,
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "ℹ️ Aucune convention-cadre active pour ce fournisseur. Vous pouvez émettre un bon hors convention en mode 'Dette'.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.colors.onStatusWarning,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
 
+                // Debt Checkbox
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Checkbox(checked = isDebt, onCheckedChange = { isDebt = it })
-                    Text("Dette Urgente / Régularisation Hors Quota", style = MaterialTheme.typography.bodyMedium)
+                    Column {
+                        Text("Commande en Dette Urgente (Dépassement de Quota autorisé)", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium))
+                        Text("Permet de commander au-delà du quota conventionné en cas d'urgence médicale.", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
+                    }
                 }
 
-                Text("Ligne d'article initiale:", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                OutlinedTextField(
-                    value = itemDesignation,
-                    onValueChange = { itemDesignation = it },
-                    label = { Text("Désignation de l'article") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                HorizontalDivider()
+
+                // Article Selector Section
+                Text(
+                    "3. Sélectionner un Article sous Convention :",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
                 )
+
+                if (conventionArticles.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = expandedArticleDropdown,
+                        onExpandedChange = { expandedArticleDropdown = it }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedArticle?.let { "${it.designation} (Solde dispo: ${it.remainingQuantity.toLong()} ${it.unite})" } ?: "Choisir un article...",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Article conventionné") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedArticleDropdown) },
+                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedArticleDropdown,
+                            onDismissRequest = { expandedArticleDropdown = false }
+                        ) {
+                            conventionArticles.forEach { article ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(article.designation, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                "Reste: ${article.remainingQuantity.toLong()} / ${article.agreedQuantity.toLong()} ${article.unite} • Prix: ${article.unitPrice.toLong()} DZD",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (article.remainingQuantity <= article.minQuantity) AppTheme.colors.statusUrgent else AppTheme.colors.textSecondary
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedArticle = article
+                                        expandedArticleDropdown = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectedArticle != null) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Solde restant: ${selectedArticle!!.remainingQuantity.toLong()} ${selectedArticle!!.unite}",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (selectedArticle!!.remainingQuantity <= 0) AppTheme.colors.statusUrgent else AppTheme.colors.statusSuccess
+                                )
+                                Text(
+                                    text = "Prix: ${selectedArticle!!.unitPrice.toLong()} DZD / ${selectedArticle!!.unite}",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        // Quantity input
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = itemQtyText,
+                                onValueChange = { itemQtyText = it },
+                                label = { Text("Quantité à commander") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    val art = selectedArticle ?: return@Button
+                                    if (enteredQty > 0 && (!isOverQuota || isDebt)) {
+                                        draftItems.add(
+                                            OrderDraftItem(
+                                                conventionItemId = art.conventionItemId,
+                                                designation = art.designation,
+                                                unite = art.unite,
+                                                quantity = enteredQty,
+                                                unitPrice = art.unitPrice
+                                            )
+                                        )
+                                        selectedArticle = null
+                                        itemQtyText = "10"
+                                    }
+                                },
+                                enabled = selectedArticle != null && enteredQty > 0 && (!isOverQuota || isDebt),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("+ Ajouter Ligne")
+                            }
+                        }
+
+                        if (isOverQuota) {
+                            Text(
+                                text = "⚠️ Quantité demandée (${enteredQty.toLong()}) supérieure au solde restant (${selectedArticle!!.remainingQuantity.toLong()}) ! Cochez 'Dette Urgente' pour autoriser.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AppTheme.colors.statusUrgent
+                            )
+                        }
+                    }
+                }
+
+                // Table of added lines
+                if (draftItems.isNotEmpty()) {
+                    Text(
+                        "Lignes de commande ajoutées (${draftItems.size}) :",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(110.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(6.dp)) {
+                            items(draftItems) { item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(2f)) {
+                                        Text(item.designation, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                                        Text("${item.quantity.toLong()} ${item.unite} × ${item.unitPrice.toLong()} DZD", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
+                                    }
+                                    Text(
+                                        "${item.subtotal.toLong()} DZD",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                    Text(
+                                        "✕",
+                                        modifier = Modifier.clickable { draftItems.remove(item) }.padding(4.dp),
+                                        fontSize = 12.sp,
+                                        color = AppTheme.colors.statusUrgent
+                                    )
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                            }
+                        }
+                    }
+                }
+
+                // Total Summary
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = itemQtyText,
-                        onValueChange = { itemQtyText = it },
-                        label = { Text("Quantité") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = itemPriceText,
-                        onValueChange = { itemPriceText = it },
-                        label = { Text("Prix Unit. DZD") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
+                    Text("Total Bon de Commande:", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        "${totalOrderAmount.toLong()} DZD",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -471,22 +710,14 @@ private fun NewOrderDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val supplier = selectedSupplier
-                    if (ref.isNotBlank() && supplier != null) {
-                        val items = if (itemDesignation.isNotBlank()) {
-                            listOf(
-                                OrderDraftItem(
-                                    designation = itemDesignation.trim(),
-                                    quantity = itemQtyText.toDoubleOrNull() ?: 1.0,
-                                    unitPrice = itemPriceText.toDoubleOrNull() ?: 0.0
-                                )
-                            )
-                        } else emptyList()
-                        onConfirm(ref.trim(), supplier.id, date, isDebt, items)
+                    val supplier = currentSupplier
+                    if (ref.isNotBlank() && supplier != null && draftItems.isNotEmpty()) {
+                        onConfirm(ref.trim(), supplier.id, date, isDebt, draftItems.toList())
                     }
-                }
+                },
+                enabled = ref.isNotBlank() && currentSupplier != null && draftItems.isNotEmpty()
             ) {
-                Text("Émettre Bon de Commande")
+                Text("Émettre Bon de Commande (${draftItems.size} art.)")
             }
         },
         dismissButton = {

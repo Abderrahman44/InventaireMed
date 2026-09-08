@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -149,7 +150,7 @@ fun SuppliersScreen(
                 .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Left Pane: Suppliers List (320.dp)
+            // Left Pane: Suppliers List (340.dp)
             Card(
                 modifier = Modifier
                     .width(340.dp)
@@ -425,7 +426,7 @@ private fun ConventionsTabView(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Plafond global: ${conv.totalMontant.toLong()} DZD",
+                                    text = "Plafond global: ${conv.totalMontant.toLong()} DZD • ${convBalances.size} article(s)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
@@ -442,7 +443,7 @@ private fun ConventionsTabView(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Suivi des quotas par article:",
+                            text = "Suivi des quotas par article (${convBalances.size}):",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = AppTheme.colors.textSecondary
                         )
@@ -510,8 +511,9 @@ private fun ReferencedArticlesTabView(
                 ) {
                     Text("DÉSIGNATION", modifier = Modifier.weight(2f), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("UNITÉ", modifier = Modifier.width(90.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("PRIX NÉGOCIÉ", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("QUOTA CONVENU", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
-                    Text("COMMANDÉ", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("COMMANDÉ", modifier = Modifier.width(100.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("SOLDE RESTANT", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                 }
             }
@@ -524,8 +526,9 @@ private fun ReferencedArticlesTabView(
                 ) {
                     Text(item.designation, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = AppTheme.colors.textPrimary)
                     Text(item.unite, modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                    Text("${item.unitPrice.toLong()} DZD", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text("${item.agreedQuantity.toLong()}", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = AppTheme.colors.textPrimary)
-                    Text("${item.orderedQuantity.toLong()}", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text("${item.orderedQuantity.toLong()}", modifier = Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(
                         "${item.remainingQuantity.toLong()}",
                         modifier = Modifier.width(110.dp),
@@ -689,17 +692,21 @@ private fun AddSupplierDialog(
 private fun AddConventionDialog(
     supplierName: String,
     onDismiss: () -> Unit,
-    onConfirm: (Long, String, Double, List<Pair<String, Double>>) -> Unit
+    onConfirm: (Long, String, Double, List<ConventionDraftArticle>) -> Unit
 ) {
     var ordNumberText by remember { mutableStateOf("1") }
     var date by remember { mutableStateOf("2026-09-08") }
     var montantText by remember { mutableStateOf("5000000") }
+
+    val draftArticles = remember { mutableStateListOf<ConventionDraftArticle>() }
+
     var itemDesignation by remember { mutableStateOf("") }
+    var itemUnite by remember { mutableStateOf("BOITE") }
     var itemQtyText by remember { mutableStateOf("100") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nouvelle Convention - $supplierName", fontWeight = FontWeight.Bold) },
+        title = { Text("Nouvelle Convention (Multi-Articles) - $supplierName", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.padding(vertical = 8.dp),
@@ -712,31 +719,79 @@ private fun AddConventionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Date (AAAA-MM-JJ)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = montantText,
-                    onValueChange = { montantText = it },
-                    label = { Text("Plafond Budgétaire Global (DZD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text("Article conventionné initial (optionnel):", style = MaterialTheme.typography.labelSmall)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = date,
+                        onValueChange = { date = it },
+                        label = { Text("Date (AAAA-MM-JJ)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = montantText,
+                        onValueChange = { montantText = it },
+                        label = { Text("Plafond Global (DZD)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1.5f)
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Text("Articles sous convention (${draftArticles.size}):", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+
+                // Table of currently added articles
+                if (draftArticles.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(6.dp)) {
+                            items(draftArticles) { article ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "${article.designation} (${article.quantity.toLong()} ${article.unite})",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        "✕",
+                                        modifier = Modifier.clickable { draftArticles.remove(article) }.padding(4.dp),
+                                        fontSize = 11.sp,
+                                        color = AppTheme.colors.statusUrgent
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Add article row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
                         value = itemDesignation,
                         onValueChange = { itemDesignation = it },
                         label = { Text("Désignation") },
                         singleLine = true,
-                        modifier = Modifier.weight(2f)
+                        modifier = Modifier.weight(1.8f)
+                    )
+                    OutlinedTextField(
+                        value = itemUnite,
+                        onValueChange = { itemUnite = it },
+                        label = { Text("Unité") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = itemQtyText,
@@ -746,6 +801,27 @@ private fun AddConventionDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                OutlinedButton(
+                    onClick = {
+                        if (itemDesignation.isNotBlank()) {
+                            val qty = itemQtyText.toDoubleOrNull() ?: 50.0
+                            draftArticles.add(
+                                ConventionDraftArticle(
+                                    designation = itemDesignation.trim(),
+                                    unite = itemUnite.trim(),
+                                    quantity = qty
+                                )
+                            )
+                            itemDesignation = ""
+                            itemQtyText = "100"
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.End),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text("+ Ajouter cet Article", fontSize = 12.sp)
+                }
             }
         },
         confirmButton = {
@@ -753,10 +829,7 @@ private fun AddConventionDialog(
                 onClick = {
                     val ord = ordNumberText.toLongOrNull() ?: 1L
                     val montant = montantText.toDoubleOrNull() ?: 0.0
-                    val items = if (itemDesignation.isNotBlank()) {
-                        listOf(itemDesignation to (itemQtyText.toDoubleOrNull() ?: 50.0))
-                    } else emptyList()
-                    onConfirm(ord, date, montant, items)
+                    onConfirm(ord, date, montant, draftArticles.toList())
                 }
             ) {
                 Text("Créer Convention")

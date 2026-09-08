@@ -11,7 +11,9 @@ import org.abdat.inventory.data.mapper.toDomain
 import org.abdat.inventory.database.AppDatabase
 import org.abdat.inventory.domain.model.BonDeCommande
 import org.abdat.inventory.domain.model.CommandeItem
+import org.abdat.inventory.domain.model.Convention
 import org.abdat.inventory.domain.model.Fournisseur
+import org.abdat.inventory.ui.suppliers.ConventionQuotaBalance
 
 enum class OrderStatusFilter(val label: String) {
     ALL("Tous les BC"),
@@ -31,10 +33,15 @@ data class OrderDisplayItem(
 )
 
 data class OrderDraftItem(
+    val conventionItemId: Long? = null,
+    val codeArticle: String = "",
     val designation: String,
+    val unite: String = "UNITE",
     val quantity: Double,
     val unitPrice: Double
-)
+) {
+    val subtotal: Double get() = quantity * unitPrice
+}
 
 data class OrdersUiState(
     val orders: List<OrderDisplayItem> = emptyList(),
@@ -47,6 +54,10 @@ data class OrdersUiState(
     val strainedConventionsCount: Int = 0,
     val suppliers: List<Fournisseur> = emptyList(),
     val isNewOrderDialogOpen: Boolean = false,
+    val selectedSupplierId: Long? = null,
+    val conventionsForSupplier: List<Convention> = emptyList(),
+    val selectedConventionId: Long? = null,
+    val articlesForConvention: List<ConventionQuotaBalance> = emptyList(),
     val isLoading: Boolean = false
 )
 
@@ -149,11 +160,65 @@ class OrdersViewModel(
     }
 
     fun openNewOrderDialog() {
+        val firstSupplier = _uiState.value.suppliers.firstOrNull()
         _uiState.update { it.copy(isNewOrderDialogOpen = true) }
+        if (firstSupplier != null) {
+            selectSupplierForNewOrder(firstSupplier.id)
+        }
     }
 
     fun closeNewOrderDialog() {
         _uiState.update { it.copy(isNewOrderDialogOpen = false) }
+    }
+
+    fun selectSupplierForNewOrder(supplierId: Long) {
+        val dbConventions = database.appDatabaseQueries.selectConventionsByFournisseur(supplierId).executeAsList()
+        val conventions = dbConventions.map { it.toDomain() }
+        val firstConvention = conventions.firstOrNull()
+
+        _uiState.update {
+            it.copy(
+                selectedSupplierId = supplierId,
+                conventionsForSupplier = conventions,
+                selectedConventionId = firstConvention?.id
+            )
+        }
+
+        if (firstConvention != null) {
+            selectConventionForNewOrder(firstConvention.id)
+        } else {
+            _uiState.update { it.copy(articlesForConvention = emptyList()) }
+        }
+    }
+
+    fun selectConventionForNewOrder(conventionId: Long) {
+        val stockPriceMap = database.appDatabaseQueries.selectAllStockArticles().executeAsList()
+            .associate { it.designation.lowercase().trim() to (it.unit_price to it.code_article) }
+
+        val balances = database.appDatabaseQueries.selectConventionBalancesByConventionId(conventionId)
+            .executeAsList()
+            .map {
+                val stockInfo = stockPriceMap[it.designation.lowercase().trim()]
+                val price = stockInfo?.first ?: 150.0
+                ConventionQuotaBalance(
+                    conventionItemId = it.conventionItemId,
+                    conventionId = it.conventionId,
+                    designation = it.designation,
+                    unite = it.unite,
+                    agreedQuantity = it.agreedQuantity,
+                    minQuantity = it.minQuantity,
+                    orderedQuantity = it.orderedQuantity,
+                    remainingQuantity = it.remainingQuantity,
+                    unitPrice = price
+                )
+            }
+
+        _uiState.update {
+            it.copy(
+                selectedConventionId = conventionId,
+                articlesForConvention = balances
+            )
+        }
     }
 
     fun createOrder(
@@ -163,38 +228,48 @@ class OrdersViewModel(
         isDebt: Boolean,
         items: List<OrderDraftItem>
     ) {
-        viewModelScope.launch {
-            database.transaction {
-                database.appDatabaseQueries.insertCommande(
-                    reference_bon = reference,
-                    fournisseur_id = supplierId,
-                    date = date,
-                    is_debt = if (isDebt) 1L else 0L
-                )
-                val newOrderId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
+        createOrderSync(reference, supplierId, date, isDebt, items)
+    }
 
-                items.forEach { draft ->
-                    database.appDatabaseQueries.insertCommandeItem(
-                        commande_id = newOrderId,
-                        convention_item_id = null,
-                        code_article = "",
-                        designation = draft.designation,
-                        type = "STANDARD",
-                        family = "Médical",
-                        quantity = draft.quantity,
-                        unit_price = draft.unitPrice
-                    )
-                }
+    fun createOrderSync(
+        reference: String,
+        supplierId: Long,
+        date: String,
+        isDebt: Boolean,
+        items: List<OrderDraftItem>
+    ) {
+        database.transaction {
+            database.appDatabaseQueries.insertCommande(
+                reference_bon = reference,
+                fournisseur_id = supplierId,
+                date = date,
+                is_debt = if (isDebt) 1L else 0L
+            )
+            val newOrderId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
+
+            items.forEach { draft ->
+                database.appDatabaseQueries.insertCommandeItem(
+                    commande_id = newOrderId,
+                    convention_item_id = draft.conventionItemId,
+                    code_article = draft.codeArticle,
+                    designation = draft.designation,
+                    type = "STANDARD",
+                    family = "Médical",
+                    quantity = draft.quantity,
+                    unit_price = draft.unitPrice
+                )
             }
-            closeNewOrderDialog()
-            loadOrdersSync()
         }
+        closeNewOrderDialog()
+        loadOrdersSync()
     }
 
     fun deleteOrder(id: Long) {
-        viewModelScope.launch {
-            database.appDatabaseQueries.deleteCommande(id)
-            loadOrdersSync()
-        }
+        deleteOrderSync(id)
+    }
+
+    fun deleteOrderSync(id: Long) {
+        database.appDatabaseQueries.deleteCommande(id)
+        loadOrdersSync()
     }
 }

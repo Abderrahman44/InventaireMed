@@ -26,5 +26,6 @@ data class ConventionItem(
     val designation: String,
     val unite: String,
     val quantity: Double,
-    val minQuantity: Double = 0.0
+    val minQuantity: Double = 0.0,
+    val unitPrice: Double = 0.0
 )

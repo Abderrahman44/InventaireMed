@@ -94,7 +94,7 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
         database.appDatabaseQueries.insertFournisseur("GROUPE SAIDAL PHARMA SPA")
         val idFrn3 = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
-        // 3. Seed Conventions
+        // 3. Seed Conventions with Multiple Articles
         database.appDatabaseQueries.insertConvention(
             fournisseur_id = idFrn1,
             ord_number = 1L,
@@ -110,6 +110,8 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             quantity = 200.0,
             min_quantity = 20.0
         )
+        val conv1Item1Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
+
         database.appDatabaseQueries.insertConventionItem(
             convention_id = conv1Id,
             designation = "Tubulures de Perfusion avec Régulateur",
@@ -117,6 +119,7 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             quantity = 500.0,
             min_quantity = 50.0
         )
+        val conv1Item2Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
         database.appDatabaseQueries.insertConvention(
             fournisseur_id = idFrn2,
@@ -133,6 +136,8 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             quantity = 2000.0,
             min_quantity = 100.0
         )
+        val conv2Item1Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
+
         database.appDatabaseQueries.insertConventionItem(
             convention_id = conv2Id,
             designation = "Amoxicilline + Acide Clavulanique 1g",
@@ -140,8 +145,9 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             quantity = 800.0,
             min_quantity = 50.0
         )
+        val conv2Item2Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
-        // 4. Seed Commandes
+        // 4. Seed Commandes with Linked Convention Articles
         database.appDatabaseQueries.insertCommande(
             reference_bon = "BC-2026-0841",
             fournisseur_id = idFrn2,
@@ -151,7 +157,7 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
         val cmd1Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertCommandeItem(
             commande_id = cmd1Id,
-            convention_item_id = null,
+            convention_item_id = conv2Item1Id,
             code_article = "MED-001",
             designation = "Paracétamol 1g Perfusion IV",
             type = "CONVENTION",
@@ -161,7 +167,7 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
         )
         database.appDatabaseQueries.insertCommandeItem(
             commande_id = cmd1Id,
-            convention_item_id = null,
+            convention_item_id = conv2Item2Id,
             code_article = "MED-002",
             designation = "Amoxicilline + Acide Clavulanique 1g",
             type = "CONVENTION",
@@ -179,7 +185,7 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
         val cmd2Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertCommandeItem(
             commande_id = cmd2Id,
-            convention_item_id = null,
+            convention_item_id = conv1Item1Id,
             code_article = "MAT-101",
             designation = "Seringues Stériles 5ml 3 pièces",
             type = "CONVENTION",

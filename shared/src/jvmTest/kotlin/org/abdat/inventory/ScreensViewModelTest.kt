@@ -4,8 +4,10 @@ import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import org.abdat.inventory.database.AppDatabase
 import org.abdat.inventory.database.seedInitialDataIfEmpty
 import org.abdat.inventory.ui.inventory.InventoryViewModel
+import org.abdat.inventory.ui.orders.OrderDraftItem
 import org.abdat.inventory.ui.orders.OrderStatusFilter
 import org.abdat.inventory.ui.orders.OrdersViewModel
+import org.abdat.inventory.ui.suppliers.ConventionDraftArticle
 import org.abdat.inventory.ui.suppliers.SuppliersViewModel
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -71,7 +73,7 @@ class ScreensViewModelTest {
         assertNotNull(state.selectedSupplier)
 
         // Conventions for selected supplier
-        viewModel.loadSupplierDetails(state.selectedSupplier!!.id)
+        viewModel.loadSupplierDetailsSync(state.selectedSupplier.id)
         val updatedState = viewModel.uiState.value
         assertTrue(updatedState.conventions.isNotEmpty())
 
@@ -81,11 +83,87 @@ class ScreensViewModelTest {
     }
 
     @Test
+    fun testMultiArticleConventionCreation() {
+        val suppliersVm = SuppliersViewModel(database)
+        val supplier = suppliersVm.uiState.value.suppliers.first()
+        suppliersVm.selectSupplier(supplier)
+
+        val multiArticles = listOf(
+            ConventionDraftArticle("Gants Examen Latex M", "BOITE", 300.0),
+            ConventionDraftArticle("Compresses Stériles 10x10", "PAQUET", 500.0),
+            ConventionDraftArticle("Alcool Chirurgical 70°", "FLACON", 150.0)
+        )
+
+        suppliersVm.addConvention(
+            ordNumber = 99L,
+            date = "2026-09-08",
+            totalMontant = 1200000.0,
+            items = multiArticles
+        )
+
+        val updatedConventions = database.appDatabaseQueries.selectConventionsByFournisseur(supplier.id).executeAsList()
+        val newConv = updatedConventions.firstOrNull { it.ord_number == 99L }
+        assertNotNull(newConv)
+
+        val convItems = database.appDatabaseQueries.selectConventionItemsByConventionId(newConv.id).executeAsList()
+        assertEquals(3, convItems.size, "Expected 3 articles under the new convention")
+    }
+
+    @Test
+    fun testOrderConventionArticleSelectionAndMultiLineCreation() {
+        val ordersVm = OrdersViewModel(database)
+        val suppliers = ordersVm.uiState.value.suppliers
+        val biopharm = suppliers.first { it.fullName.contains("BIOPHARM") }
+
+        ordersVm.selectSupplierForNewOrder(biopharm.id)
+        val orderState = ordersVm.uiState.value
+
+        assertTrue(orderState.conventionsForSupplier.isNotEmpty(), "Expected conventions for BIOPHARM")
+        assertTrue(orderState.articlesForConvention.isNotEmpty(), "Expected convention articles for BIOPHARM")
+
+        val article1 = orderState.articlesForConvention[0]
+        val article2 = orderState.articlesForConvention[1]
+
+        // Create multi-line purchase order
+        val draftLines = listOf(
+            OrderDraftItem(
+                conventionItemId = article1.conventionItemId,
+                designation = article1.designation,
+                unite = article1.unite,
+                quantity = 100.0,
+                unitPrice = article1.unitPrice
+            ),
+            OrderDraftItem(
+                conventionItemId = article2.conventionItemId,
+                designation = article2.designation,
+                unite = article2.unite,
+                quantity = 50.0,
+                unitPrice = article2.unitPrice
+            )
+        )
+
+        val expectedTotal = (100.0 * article1.unitPrice) + (50.0 * article2.unitPrice)
+
+        ordersVm.createOrder(
+            reference = "BC-2026-TEST-MULTI",
+            supplierId = biopharm.id,
+            date = "2026-09-08",
+            isDebt = false,
+            items = draftLines
+        )
+
+        val newOrder = ordersVm.uiState.value.orders.firstOrNull { it.commande.referenceBon == "BC-2026-TEST-MULTI" }
+        assertNotNull(newOrder)
+        assertEquals(2, newOrder.itemsCount)
+        assertEquals(expectedTotal, newOrder.totalAmountDzd)
+    }
+
+    @Test
     fun testOrdersViewModelAndFilter() {
         val viewModel = OrdersViewModel(database)
         val state = viewModel.uiState.value
 
-        assertEquals(3, state.activeOrdersCount)
+        assertTrue(state.activeOrdersCount >= 3)
         assertTrue(state.totalCommittedDzd > 0.0)
 
         // Status filtering

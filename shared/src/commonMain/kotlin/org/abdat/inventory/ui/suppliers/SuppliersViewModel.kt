@@ -20,6 +20,13 @@ enum class SupplierDetailTab(val label: String) {
     EVALUATIONS("Évaluations & SLA")
 }
 
+data class ConventionDraftArticle(
+    val designation: String,
+    val unite: String = "UNITE",
+    val quantity: Double,
+    val minQuantity: Double = 5.0
+)
+
 data class ConventionQuotaBalance(
     val conventionItemId: Long,
     val conventionId: Long,
@@ -28,7 +35,8 @@ data class ConventionQuotaBalance(
     val agreedQuantity: Double,
     val minQuantity: Double,
     val orderedQuantity: Double,
-    val remainingQuantity: Double
+    val remainingQuantity: Double,
+    val unitPrice: Double = 0.0
 )
 
 data class SupplierHistoryItem(
@@ -131,12 +139,16 @@ class SuppliersViewModel(
             conv.toDomain(items)
         }
 
+        val stockPriceMap = database.appDatabaseQueries.selectAllStockArticles().executeAsList()
+            .associate { it.designation.lowercase().trim() to it.unit_price }
+
         // Quota balances for each convention
         val balancesMap = mutableMapOf<Long, List<ConventionQuotaBalance>>()
         for (conv in domainConventions) {
             val balances = database.appDatabaseQueries.selectConventionBalancesByConventionId(conv.id)
                 .executeAsList()
                 .map {
+                    val price = stockPriceMap[it.designation.lowercase().trim()] ?: 150.0
                     ConventionQuotaBalance(
                         conventionItemId = it.conventionItemId,
                         conventionId = it.conventionId,
@@ -145,7 +157,8 @@ class SuppliersViewModel(
                         agreedQuantity = it.agreedQuantity,
                         minQuantity = it.minQuantity,
                         orderedQuantity = it.orderedQuantity,
-                        remainingQuantity = it.remainingQuantity
+                        remainingQuantity = it.remainingQuantity,
+                        unitPrice = price
                     )
                 }
             balancesMap[conv.id] = balances
@@ -202,11 +215,13 @@ class SuppliersViewModel(
     }
 
     fun addSupplier(name: String) {
-        viewModelScope.launch {
-            database.appDatabaseQueries.insertFournisseur(name.trim())
-            closeAddSupplierDialog()
-            loadSuppliersSync()
-        }
+        addSupplierSync(name)
+    }
+
+    fun addSupplierSync(name: String) {
+        database.appDatabaseQueries.insertFournisseur(name.trim())
+        closeAddSupplierDialog()
+        loadSuppliersSync()
     }
 
     fun openAddConventionDialog() {
@@ -221,31 +236,38 @@ class SuppliersViewModel(
         ordNumber: Long,
         date: String,
         totalMontant: Double,
-        items: List<Pair<String, Double>>
+        items: List<ConventionDraftArticle>
+    ) {
+        addConventionSync(ordNumber, date, totalMontant, items)
+    }
+
+    fun addConventionSync(
+        ordNumber: Long,
+        date: String,
+        totalMontant: Double,
+        items: List<ConventionDraftArticle>
     ) {
         val currentSupplier = _uiState.value.selectedSupplier ?: return
-        viewModelScope.launch {
-            database.transaction {
-                database.appDatabaseQueries.insertConvention(
-                    fournisseur_id = currentSupplier.id,
-                    ord_number = ordNumber,
-                    date = date,
-                    global_unit_price = 0.0,
-                    total_montant = totalMontant
+        database.transaction {
+            database.appDatabaseQueries.insertConvention(
+                fournisseur_id = currentSupplier.id,
+                ord_number = ordNumber,
+                date = date,
+                global_unit_price = 0.0,
+                total_montant = totalMontant
+            )
+            val convId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
+            items.forEach { item ->
+                database.appDatabaseQueries.insertConventionItem(
+                    convention_id = convId,
+                    designation = item.designation,
+                    unite = item.unite,
+                    quantity = item.quantity,
+                    min_quantity = item.minQuantity
                 )
-                val convId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
-                items.forEach { (designation, quantity) ->
-                    database.appDatabaseQueries.insertConventionItem(
-                        convention_id = convId,
-                        designation = designation,
-                        unite = "UNITE",
-                        quantity = quantity,
-                        min_quantity = 5.0
-                    )
-                }
             }
-            closeAddConventionDialog()
-            loadSupplierDetailsSync(currentSupplier.id)
         }
+        closeAddConventionDialog()
+        loadSupplierDetailsSync(currentSupplier.id)
     }
 }
