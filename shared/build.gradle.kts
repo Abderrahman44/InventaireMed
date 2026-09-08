@@ -42,6 +42,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(libs.sqldelight.driver.sqlite)
             implementation(libs.kotlin.csv)
+            implementation(libs.kotlinx.coroutinesSwing)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
