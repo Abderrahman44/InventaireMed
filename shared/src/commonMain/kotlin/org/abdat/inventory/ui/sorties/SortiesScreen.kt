@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Payments
@@ -43,12 +45,16 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +62,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -77,6 +87,15 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.SortiesCsvMapper
+import org.abdat.inventory.util.showSaveFileDialog
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+
+import kotlinx.datetime.toLocalDateTime
+import androidx.compose.runtime.rememberCoroutineScope
 
 @Composable
 fun SortiesScreen(viewModel: SortiesViewModel) {
@@ -86,6 +105,9 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
     var isAddArticleDialogOpen by remember { mutableStateOf(false) }
     var selectedSortieForInspection by remember { mutableStateOf<SortieDisplayItem?>(null) }
     var showCsvNotification by remember { mutableStateOf(false) }
+    var csvExportSuccessPath by remember { mutableStateOf<String?>(null) }
+    var csvExportError by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -174,7 +196,26 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { showCsvNotification = true },
+                        onClick = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Sorties CSV",
+                                    defaultFileName = "registre_sorties.csv",
+                                    filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                                )
+                                if (path != null) {
+                                    try {
+                                        val (headers, rows) = SortiesCsvMapper.toHeadersAndRows(state.filteredSorties)
+                                        CsvExporter.writeCsv(path, headers, rows)
+                                        csvExportSuccessPath = path
+                                        csvExportError = null
+                                    } catch (e: Exception) {
+                                        csvExportError = e.message ?: "Erreur inconnue lors de l'export"
+                                        csvExportSuccessPath = null
+                                    }
+                                }
+                            }
+                        },
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = AppTheme.colors.textPrimary),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f))
@@ -459,39 +500,37 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                         }
 
                         // Date & Heure
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(modifier = Modifier.weight(1.2f)) {
                             Text(
                                 text = "DATE & HEURE DE SORTIE *",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = AppTheme.colors.textSecondary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            CustomInputField(
+                            DateTimePickerInputField(
                                 value = state.issueDate,
-                                onValueChange = { viewModel.updateIssueDate(it) },
-                                placeholder = "YYYY-MM-DD HH:mm",
-                                leadingIcon = Icons.Default.CalendarToday
+                                onValueChange = { viewModel.updateIssueDate(it) }
                             )
                         }
 
-                        // Demandeur / Récepteur
-                        Column(modifier = Modifier.weight(1.3f)) {
+                        // Demandeur
+                        Column(modifier = Modifier.weight(1.4f)) {
                             Text(
-                                text = "DEMANDEUR / RÉCEPTEUR INTERNE *",
+                                text = "DEMANDEUR (MÉDECIN / RESPONSABLE) *",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = AppTheme.colors.textSecondary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             CustomInputField(
-                                value = state.recipientName,
-                                onValueChange = { viewModel.updateRecipientName(it) },
-                                placeholder = "Nom & Prénom / Fonction",
+                                value = state.demandeur,
+                                onValueChange = { viewModel.updateDemandeur(it) },
+                                placeholder = "Nom & Prénom du demandeur",
                                 leadingIcon = Icons.Default.Person
                             )
                         }
                     }
 
-                    // Row 2: Imputation Analytique (Service, Local, Motif)
+                    // Row 2: Imputation Analytique (Service, Local, Récepteur, Motif)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -526,7 +565,23 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                             )
                         }
 
-                        // Motif d'Imputation Dropdown
+                        // Récepteur Interne
+                        Column(modifier = Modifier.weight(1.3f)) {
+                            Text(
+                                text = "RÉCEPTEUR INTERNE (AGENT / ÉMARGÉ) *",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            CustomInputField(
+                                value = state.recepteurInterne,
+                                onValueChange = { viewModel.updateRecepteurInterne(it) },
+                                placeholder = "Nom de l'agent récepteur",
+                                leadingIcon = Icons.Default.Badge
+                            )
+                        }
+
+                        // Motif d'Imputation (Free-text input)
                         Column(modifier = Modifier.weight(1.4f)) {
                             Text(
                                 text = "MOTIF / TYPE D'IMPUTATION *",
@@ -534,9 +589,10 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                 color = AppTheme.colors.textSecondary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            MotiveDropdownSelector(
-                                selectedMotive = state.selectedMotive,
-                                onMotiveSelected = { viewModel.updateMotive(it) }
+                            CustomInputField(
+                                value = state.motive,
+                                onValueChange = { viewModel.updateMotive(it) },
+                                placeholder = "Ex: Consommation courante, Urgence..."
                             )
                         }
                     }
@@ -735,7 +791,9 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                                 referenceBon = state.systemReference,
                                                 serviceId = srv.id,
                                                 localId = state.selectedLocal?.id,
-                                                recipient = state.recipientName,
+                                                demandeur = state.demandeur,
+                                                recepteurInterne = state.recepteurInterne,
+                                                motif = state.motive,
                                                 date = state.issueDate
                                             )
                                         }
@@ -917,12 +975,29 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                     )
                                 }
 
-                                Text(
-                                    text = item.recipient,
-                                    modifier = Modifier.weight(1.8f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTheme.colors.textPrimary
-                                )
+                                Column(modifier = Modifier.weight(1.8f)) {
+                                    if (item.demandeur.isNotBlank()) {
+                                        Text(
+                                            text = "Dem: ${item.demandeur}",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                            color = AppTheme.colors.textPrimary
+                                        )
+                                    }
+                                    if (item.recepteurInterne.isNotBlank()) {
+                                        Text(
+                                            text = "Réc: ${item.recepteurInterne}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = AppTheme.colors.textSecondary
+                                        )
+                                    }
+                                    if (item.demandeur.isBlank() && item.recepteurInterne.isBlank()) {
+                                        Text(
+                                            text = item.recipient.ifBlank { "-" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = AppTheme.colors.textSecondary
+                                        )
+                                    }
+                                }
 
                                 Text(
                                     text = "${item.itemsCount}",
@@ -991,9 +1066,9 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
         )
     }
 
-    // Notification CSV Dialog
-    if (showCsvNotification) {
-        Dialog(onDismissRequest = { showCsvNotification = false }) {
+    // CSV Export Success Notification
+    csvExportSuccessPath?.let { path ->
+        Dialog(onDismissRequest = { csvExportSuccessPath = null }) {
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = AppTheme.colors.surfaceWhite,
@@ -1020,12 +1095,12 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                         )
                     }
                     Text(
-                        text = "Le fichier 'registre_sorties_materiel.csv' a été préparé avec succès (${state.sorties.size} enregistrements).",
+                        text = "Le fichier a été exporté avec succès (${state.filteredSorties.size} enregistrements).\n\nChemin : $path",
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppTheme.colors.textSecondary
                     )
                     Button(
-                        onClick = { showCsvNotification = false },
+                        onClick = { csvExportSuccessPath = null },
                         modifier = Modifier.align(Alignment.End),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -1034,6 +1109,18 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                 }
             }
         }
+    }
+
+    // CSV Export Error Notification
+    csvExportError?.let { error ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { csvExportError = null },
+            title = { Text("Erreur d'export", fontWeight = FontWeight.Bold) },
+            text = { Text("L'export CSV a échoué :\n$error") },
+            confirmButton = {
+                Button(onClick = { csvExportError = null }) { Text("OK") }
+            }
+        )
     }
 }
 
@@ -1232,6 +1319,154 @@ private fun CustomInputField(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateTimePickerInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var tempDate by remember { mutableStateOf("") }
+
+    val initialMillis = remember(value) {
+        try {
+            if (value.isNotBlank()) {
+                val cleanDate = value.trim().substringBefore("T").substringBefore(" ")
+                kotlin.time.Instant.parse("${cleanDate}T00:00:00Z").toEpochMilliseconds()
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .background(AppTheme.colors.surfaceWhite, RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.CalendarToday,
+            contentDescription = null,
+            modifier = Modifier
+                .size(16.dp)
+                .clickable { showDatePicker = true },
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (value.isEmpty()) {
+                Text(
+                    text = "YYYY-MM-DD HH:mm",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.colors.textSecondary.copy(alpha = 0.6f)
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = AppTheme.colors.textPrimary
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        IconButton(
+            onClick = { showDatePicker = true },
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.EditCalendar,
+                contentDescription = "Sélectionner la date et l'heure",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val selectedDate = kotlinx.datetime.Instant.fromEpochMilliseconds(millis)
+                                .toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
+                                .date.toString()
+                            tempDate = selectedDate
+                            showDatePicker = false
+                            showTimePicker = true
+                        } ?: run {
+                            showDatePicker = false
+                        }
+                    }
+                ) {
+                    Text("Suivant (Heure)")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Annuler")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        val existingTime = value.substringAfter(" ", "10:30")
+        val initH = existingTime.split(":").firstOrNull()?.toIntOrNull() ?: 10
+        val initM = existingTime.split(":").getOrNull(1)?.toIntOrNull() ?: 30
+        val timePickerState = rememberTimePickerState(
+            initialHour = initH,
+            initialMinute = initM,
+            is24Hour = true
+        )
+
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val h = timePickerState.hour.toString().padStart(2, '0')
+                        val m = timePickerState.minute.toString().padStart(2, '0')
+                        val datePart = tempDate.ifBlank { value.substringBefore(" ") }
+                        onValueChange("$datePart $h:$m")
+                        showTimePicker = false
+                    }
+                ) {
+                    Text("Valider")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) {
+                    Text("Annuler")
+                }
+            },
+            title = { Text("Sélectionner l'heure de sortie") },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    TimePicker(state = timePickerState)
+                }
+            }
+        )
     }
 }
 
@@ -1544,8 +1779,20 @@ private fun SortieDetailDialog(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Demandeur / Récepteur :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text(item.recipient, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                    Text("Demandeur :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                    Text(item.demandeur.ifBlank { "-" }, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Récepteur Interne :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                    Text(item.recepteurInterne.ifBlank { "-" }, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                }
+
+                if (item.motif.isNotBlank()) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Motif de Sortie :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                        Text(item.motif, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                    }
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

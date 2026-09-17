@@ -142,7 +142,10 @@ CREATE TABLE bon_de_sortie (
     reference_bon TEXT NOT NULL,
     service_id INTEGER NOT NULL REFERENCES service(id) ON DELETE RESTRICT,
     local_id INTEGER REFERENCES local(id) ON DELETE SET NULL,
-    date TEXT NOT NULL
+    date TEXT NOT NULL,
+    demandeur TEXT NOT NULL DEFAULT '',
+    recepteur_interne TEXT NOT NULL DEFAULT '',
+    motif TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE sortie_item (
@@ -614,12 +617,12 @@ selectSortiesByServiceId:
 SELECT * FROM bon_de_sortie WHERE service_id = ? ORDER BY date DESC;
 
 insertSortie:
-INSERT INTO bon_de_sortie (reference_bon, service_id, local_id, date)
-VALUES (?, ?, ?, ?);
+INSERT INTO bon_de_sortie (reference_bon, service_id, local_id, date, demandeur, recepteur_interne, motif)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 updateSortie:
 UPDATE bon_de_sortie 
-SET reference_bon = ?, service_id = ?, local_id = ?, date = ? 
+SET reference_bon = ?, service_id = ?, local_id = ?, date = ?, demandeur = ?, recepteur_interne = ?, motif = ? 
 WHERE id = ?;
 
 deleteSortie:

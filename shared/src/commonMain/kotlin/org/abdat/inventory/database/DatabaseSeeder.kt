@@ -654,7 +654,10 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             reference_bon = "BS-2026-001",
             service_id = service1Id,
             local_id = local1Id,
-            date = "2026-09-04 09:15"
+            date = "2026-09-04 09:15",
+            demandeur = "Dr. Amine Benali (Chef Bloc)",
+            recepteur_interne = "Infirmier Karim Meftah",
+            motif = "Consommation Interne Courante - Intervention Chirurgicale"
         )
         val bs1Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertSortieItem(
@@ -674,7 +677,10 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             reference_bon = "BS-2026-002",
             service_id = service2Id,
             local_id = local2Id,
-            date = "2026-09-06 14:40"
+            date = "2026-09-06 14:40",
+            demandeur = "Ing. S. Mansouri (Biomédical)",
+            recepteur_interne = "Technicien Yacine Cherif",
+            motif = "Maintenance Préventive et Tests Systèmes"
         )
         val bs2Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertSortieItem(
@@ -688,7 +694,10 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             reference_bon = "BS-2026-003",
             service_id = service3Id,
             local_id = null,
-            date = "2026-09-07 11:20"
+            date = "2026-09-07 11:20",
+            demandeur = "Pr. Rachid Khelil (Directeur Général)",
+            recepteur_interne = "Secrétaire Amel Dahmani",
+            motif = "Dotation Initiale Matériel Informatique et Bureautique"
         )
         val bs3Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertSortieItem(

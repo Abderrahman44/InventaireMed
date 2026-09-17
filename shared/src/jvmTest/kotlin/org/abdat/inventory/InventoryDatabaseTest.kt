@@ -235,7 +235,15 @@ class InventoryDatabaseTest {
         assertEquals(150.0, articleAfterDelivery.quantity)
 
         // 2. Issue Voucher (Bon de Sortie): decreases stock by 40
-        queries.insertSortie("BS-2026-101", sId, local_id = null, date = "2026-09-10")
+        queries.insertSortie(
+            reference_bon = "BS-2026-101",
+            service_id = sId,
+            local_id = null,
+            date = "2026-09-10",
+            demandeur = "Dr. Benali",
+            recepteur_interne = "Inf. Karim",
+            motif = "Urgence Chirurgicale"
+        )
         val bsId = queries.selectLastInsertedRowId().executeAsOne()
         queries.insertSortieItem(bsId, "SER-001", "Seringue 10ml", 40.0)
 
@@ -711,6 +719,65 @@ class InventoryDatabaseTest {
         val domainDecharge = queries.selectDechargeById(dechargeId).executeAsOne().toDomain()
         assertEquals(docRef, domainDecharge.referenceBon)
         assertEquals("Croissant Rouge Algérien", domainDecharge.organizationName)
+    }
+
+    @Test
+    fun testBonDeSortiePersistenceWithRequesterReceiverAndCustomMotive() {
+        val queries = database.appDatabaseQueries
+
+        // 1. Insert Service and Local
+        queries.insertService(name = "Urgences Médico-Chirurgicales", local_num = "UMC-01")
+        val serviceId = queries.selectLastInsertedRowId().executeAsOne()
+
+        queries.insertLocal(service_id = serviceId, name = "Salle Déchoquage")
+        val localId = queries.selectLastInsertedRowId().executeAsOne()
+
+        // 2. Insert Bon de Sortie with audit fields
+        queries.insertSortie(
+            reference_bon = "BS-2026-TEST",
+            service_id = serviceId,
+            local_id = localId,
+            date = "2026-09-17 16:30",
+            demandeur = "Dr. Benslimane",
+            recepteur_interne = "Infirmier Amine",
+            motif = "Besoin urgent bloc opératoire"
+        )
+        val sortieId = queries.selectLastInsertedRowId().executeAsOne()
+
+        // 3. Verify single record retrieval
+        val sortie = queries.selectSortieById(sortieId).executeAsOne()
+        assertEquals("BS-2026-TEST", sortie.reference_bon)
+        assertEquals(serviceId, sortie.service_id)
+        assertEquals(localId, sortie.local_id)
+        assertEquals("2026-09-17 16:30", sortie.date)
+        assertEquals("Dr. Benslimane", sortie.demandeur)
+        assertEquals("Infirmier Amine", sortie.recepteur_interne)
+        assertEquals("Besoin urgent bloc opératoire", sortie.motif)
+
+        // 4. Verify list retrieval includes audit trail fields
+        val allSorties = queries.selectAllSorties().executeAsList()
+        val retrieved = allSorties.firstOrNull { it.id == sortieId }
+        assertNotNull(retrieved)
+        assertEquals("Dr. Benslimane", retrieved.demandeur)
+        assertEquals("Infirmier Amine", retrieved.recepteur_interne)
+        assertEquals("Besoin urgent bloc opératoire", retrieved.motif)
+
+        // 5. Test update audit fields
+        queries.updateSortie(
+            reference_bon = "BS-2026-TEST-REV",
+            service_id = serviceId,
+            local_id = localId,
+            date = "2026-09-17 16:45",
+            demandeur = "Dr. Benslimane (Confirmé)",
+            recepteur_interne = "Major Service",
+            motif = "Régularisation dotation hebdomadaire",
+            id = sortieId
+        )
+        val updated = queries.selectSortieById(sortieId).executeAsOne()
+        assertEquals("BS-2026-TEST-REV", updated.reference_bon)
+        assertEquals("Dr. Benslimane (Confirmé)", updated.demandeur)
+        assertEquals("Major Service", updated.recepteur_interne)
+        assertEquals("Régularisation dotation hebdomadaire", updated.motif)
     }
 
     @Test

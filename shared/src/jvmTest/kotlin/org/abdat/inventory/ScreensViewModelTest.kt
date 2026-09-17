@@ -692,7 +692,7 @@ class ScreensViewModelTest {
         assertNotNull(state.selectedService, "Expected default selected service")
         assertTrue(state.localsForSelectedService.isNotEmpty(), "Expected locals for default selected service")
         assertTrue(state.availableArticles.isNotEmpty(), "Expected available stock articles")
-        assertTrue(state.draftLines.isNotEmpty(), "Expected initial draft lines")
+        assertTrue(state.draftLines.isEmpty(), "Expected initial draft lines to be empty")
         assertTrue(state.todaySortiesCount > 0, "Expected positive sorties today KPI")
         assertTrue(state.monthlyDistributedDzd > 0.0, "Expected positive monthly distributed KPI")
         assertTrue(state.activeServicesCount > 0, "Expected active services count")

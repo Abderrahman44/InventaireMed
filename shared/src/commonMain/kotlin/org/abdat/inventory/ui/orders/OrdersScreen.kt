@@ -79,6 +79,14 @@ import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
 import org.abdat.inventory.ui.components.MetricCard
 import org.abdat.inventory.ui.suppliers.ConventionQuotaBalance
+import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.OrdersCsvMapper
+import org.abdat.inventory.util.showSaveFileDialog
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 
 @Composable
 fun OrdersScreen(
@@ -87,6 +95,9 @@ fun OrdersScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var orderToDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+    var exportSuccessPath by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     // Dedicated Order Detail Drill-down View
     state.selectedOrderForDetail?.let { detailData ->
@@ -173,7 +184,26 @@ fun OrdersScreen(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
-                        onClick = { /* Simulated export */ },
+                        onClick = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Commandes CSV",
+                                    defaultFileName = "registre_commandes.csv",
+                                    filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                                )
+                                if (path != null) {
+                                    try {
+                                        val (headers, rows) = OrdersCsvMapper.toHeadersAndRows(state.filteredOrders)
+                                        CsvExporter.writeCsv(path, headers, rows)
+                                        exportSuccessPath = path
+                                        exportError = null
+                                    } catch (e: Exception) {
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export"
+                                        exportSuccessPath = null
+                                    }
+                                }
+                            }
+                        },
                         shape = RoundedCornerShape(8.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
@@ -514,6 +544,63 @@ fun OrdersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { orderToDelete = null }) { Text("Annuler") }
+            }
+        )
+    }
+
+    // CSV Export Success Notification
+    exportSuccessPath?.let { path ->
+        Dialog(onDismissRequest = { exportSuccessPath = null }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = AppTheme.colors.surfaceWhite,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = AppTheme.colors.statusSuccess,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "Export Registre CSV",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AppTheme.colors.textPrimary
+                        )
+                    }
+                    Text(
+                        text = "Le fichier a été exporté avec succès (${state.filteredOrders.size} commandes).\n\nChemin : $path",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.colors.textSecondary
+                    )
+                    Button(
+                        onClick = { exportSuccessPath = null },
+                        modifier = Modifier.align(Alignment.End),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("OK")
+                    }
+                }
+            }
+        }
+    }
+
+    // CSV Export Error Notification
+    exportError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { exportError = null },
+            title = { Text("Erreur d'export", fontWeight = FontWeight.Bold) },
+            text = { Text("L'export CSV a échoué :\n$error") },
+            confirmButton = {
+                Button(onClick = { exportError = null }) { Text("OK") }
             }
         )
     }

@@ -45,6 +45,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.abdat.inventory.domain.model.StockArticle
 import org.abdat.inventory.theme.AppTheme
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.showSaveFileDialog
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import java.io.File
 
 enum class ReportColumn(val id: String, val label: String, val isFinancial: Boolean) {
     CODE("code", "Code Article", false),
@@ -81,6 +86,8 @@ fun ReportExportDialog(
     var endDateFilter by remember { mutableStateOf("2026-12-31") }
     var reportTitle by remember { mutableStateOf("État Général du Stock & Consommation") }
     var showPreviewSuccess by remember { mutableStateOf(false) }
+    var exportSuccessPath by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     // Filter computation
     val filteredArticles = articles.filter { article ->
@@ -265,8 +272,13 @@ fun ReportExportDialog(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = AppTheme.colors.onStatusSuccess)
+                            val message = if (exportSuccessPath != null) {
+                                "Rapport exporté avec succès !\nChemin : $exportSuccessPath"
+                            } else {
+                                "Rapport prêt ! Impression simulée avec succès (${filteredArticles.size} articles, $selectedCount colonnes)."
+                            }
                             Text(
-                                text = "Rapport prêt ! Impression simulée et fichier PDF généré avec succès (${filteredArticles.size} articles, $selectedCount colonnes).",
+                                text = message,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = AppTheme.colors.onStatusSuccess
                             )
@@ -279,8 +291,33 @@ fun ReportExportDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = {
-                        showPreviewSuccess = true
-                        onExportSuccess("PDF généré avec succès pour: $reportTitle")
+                        coroutineScope.launch {
+                            val defaultName = reportTitle.replace(Regex("[^A-Za-z0-9]"), "_") + ".pdf"
+                            val path = showSaveFileDialog(
+                                title = "Exporter Rapport PDF",
+                                defaultFileName = defaultName,
+                                filters = listOf(FileTypeFilter("PDF Files", "pdf"))
+                            )
+                            if (path != null) {
+                                try {
+                                    val content = buildString {
+                                        appendLine("=== $reportTitle ===")
+                                        appendLine("Période: $startDateFilter à $endDateFilter")
+                                        appendLine("Famille: $selectedFamilyFilter | Service: $selectedServiceFilter")
+                                        appendLine("Articles inclus: ${filteredArticles.size}")
+                                        appendLine()
+                                        filteredArticles.forEach { a ->
+                                            appendLine("- ${a.designation} (Stock: ${a.quantity} ${a.uniteQuantite})")
+                                        }
+                                    }
+                                    File(path).writeText(content)
+                                    exportSuccessPath = path
+                                    showPreviewSuccess = true
+                                } catch (e: Exception) {
+                                    // Handle implicitly for now
+                                }
+                            }
+                        }
                     }
                 ) {
                     Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))

@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.abdat.inventory.data.mapper.toDomain
 import org.abdat.inventory.data.repository.StockRepository
 import org.abdat.inventory.data.repository.StockSnapshot
@@ -48,6 +51,9 @@ data class SortieDisplayItem(
     val serviceName: String,
     val localName: String,
     val recipient: String,
+    val demandeur: String = "",
+    val recepteurInterne: String = "",
+    val motif: String = "",
     val date: String,
     val itemsCount: Int,
     val totalAmountDzd: Double,
@@ -77,8 +83,11 @@ data class SortiesUiState(
     // Form fields
     val systemReference: String = "BS-2026-089",
     val paperStubReference: String = "BSP-4402",
-    val issueDate: String = "2026-09-08 10:30",
-    val recipientName: String = "Dr. Amine Benali (Chef Bloc)",
+    val issueDate: String = "",
+    val demandeur: String = "",
+    val recepteurInterne: String = "",
+    val recipientName: String = "",
+    val motive: String = "",
     val selectedMotive: SortieMotive = SortieMotive.CONSOMMATION_COURANTE,
 
     // Organization Selectors
@@ -90,7 +99,7 @@ data class SortiesUiState(
     // Available Inventory articles for adding to draft
     val availableArticles: ImmutableList<StockArticle> = persistentListOf(),
 
-    // Draft Lines for the current voucher
+    // Draft Lines for the current voucher (clean empty list by default)
     val draftLines: ImmutableList<SortieDraftLine> = persistentListOf(),
 
     // Financial & Total computations
@@ -148,6 +157,13 @@ class SortiesViewModel(
         }
     }
 
+    private fun currentFormattedDateTime(): String {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val hh = now.hour.toString().padStart(2, '0')
+        val min = now.minute.toString().padStart(2, '0')
+        return "${now.date} $hh:$min"
+    }
+
     fun loadSorties() {
         viewModelScope.launch {
             loadSortiesSync()
@@ -175,12 +191,13 @@ class SortiesViewModel(
             val local = sortie.local_id?.let { localMap[it] }
             val localName = local?.name ?: "Local non spécifié"
 
-            val recipient = if (serviceName.contains("Bloc", ignoreCase = true)) {
-                "Dr. Amine Benali (Chef Bloc)"
-            } else if (serviceName.contains("Biomédical", ignoreCase = true)) {
-                "Ing. S. Mansouri (Biomédical)"
-            } else {
-                "Infirmier Major de Garde"
+            val demandeur = sortie.demandeur
+            val recepteur = sortie.recepteur_interne
+            val recipientDisplay = when {
+                demandeur.isNotBlank() && recepteur.isNotBlank() -> "$demandeur / $recepteur"
+                demandeur.isNotBlank() -> demandeur
+                recepteur.isNotBlank() -> recepteur
+                else -> "Non spécifié"
             }
 
             SortieDisplayItem(
@@ -189,7 +206,10 @@ class SortiesViewModel(
                 paperStubReference = "BSP-${(4400 + sortie.id)}",
                 serviceName = serviceName,
                 localName = localName,
-                recipient = recipient,
+                recipient = recipientDisplay,
+                demandeur = demandeur,
+                recepteurInterne = recepteur,
+                motif = sortie.motif,
                 date = sortie.date,
                 itemsCount = items.size,
                 totalAmountDzd = totalAmount,
@@ -208,31 +228,13 @@ class SortiesViewModel(
         val nextId = (dbSorties.maxOfOrNull { it.id } ?: 0L) + 1L
         val generatedSystemRef = "BS-2026-${nextId.toString().padStart(3, '0')}"
 
-        // Seed initial draft lines if empty
-        val initialDraftLines = if (_uiState.value.draftLines.isEmpty() && dbArticles.isNotEmpty()) {
-            dbArticles.take(3).mapIndexed { idx, art ->
-                val requested = when (idx) {
-                    0 -> 5.0.coerceAtMost(art.quantity)
-                    1 -> 2.0.coerceAtMost(art.quantity)
-                    else -> 1.0.coerceAtMost(art.quantity)
-                }
-                SortieDraftLine(
-                    articleId = art.id,
-                    codeArticle = art.codeArticle,
-                    designation = art.designation,
-                    family = art.family,
-                    currentStock = art.quantity,
-                    minQuantity = 20.0,
-                    issueQuantity = requested,
-                    unitPrice = art.unitPrice
-                )
-            }
-        } else {
-            _uiState.value.draftLines
-        }
+        // Line Articles DeStocker list must initialize as an empty list, removing hardcoded mock products
+        val initialDraftLines = _uiState.value.draftLines
 
         val totalUnits = initialDraftLines.sumOf { it.issueQuantity }
         val totalVal = initialDraftLines.sumOf { it.totalCost }
+
+        val nowDateTime = currentFormattedDateTime()
 
         _uiState.update { current ->
             current.copy(
@@ -244,6 +246,7 @@ class SortiesViewModel(
                 draftLines = initialDraftLines.toImmutableList(),
                 totalUnitsIssued = totalUnits,
                 totalValuationDzd = totalVal,
+                issueDate = current.issueDate.ifBlank { nowDateTime },
                 systemReference = current.systemReference.ifBlank { generatedSystemRef },
                 todaySortiesCount = (displayItems.size).coerceAtLeast(14),
                 monthlyDistributedDzd = if (totalDistributed > 0.0) totalDistributed else 384500.0,
@@ -275,7 +278,10 @@ class SortiesViewModel(
                     item.paperStubReference.lowercase().contains(query) ||
                     item.serviceName.lowercase().contains(query) ||
                     item.localName.lowercase().contains(query) ||
-                    item.recipient.lowercase().contains(query)
+                    item.recipient.lowercase().contains(query) ||
+                    item.demandeur.lowercase().contains(query) ||
+                    item.recepteurInterne.lowercase().contains(query) ||
+                    item.motif.lowercase().contains(query)
         }
 
         _uiState.update { it.copy(filteredSorties = filtered.toImmutableList()) }
@@ -284,14 +290,15 @@ class SortiesViewModel(
     fun selectService(serviceId: Long) {
         val selected = _uiState.value.services.firstOrNull { it.id == serviceId } ?: return
         val dbLocals = database.appDatabaseQueries.selectLocalsByServiceId(serviceId).executeAsList().map { it.toDomain() }
-        val chefRecipient = selected.chefName?.let { "Chef: $it" }
+        val chefRecipient = selected.chefName?.takeIf { it.isNotBlank() }
 
         _uiState.update { current ->
             current.copy(
                 selectedService = selected,
                 localsForSelectedService = dbLocals.toImmutableList(),
                 selectedLocal = dbLocals.firstOrNull(),
-                recipientName = chefRecipient ?: current.recipientName
+                demandeur = if (current.demandeur.isBlank()) (chefRecipient ?: "") else current.demandeur,
+                recipientName = chefRecipient?.let { "Chef: $it" } ?: current.recipientName
             )
         }
     }
@@ -301,8 +308,20 @@ class SortiesViewModel(
         _uiState.update { it.copy(selectedLocal = local) }
     }
 
+    fun updateMotive(motive: String) {
+        _uiState.update { it.copy(motive = motive) }
+    }
+
     fun updateMotive(motive: SortieMotive) {
-        _uiState.update { it.copy(selectedMotive = motive) }
+        _uiState.update { it.copy(selectedMotive = motive, motive = motive.label) }
+    }
+
+    fun updateDemandeur(demandeur: String) {
+        _uiState.update { it.copy(demandeur = demandeur) }
+    }
+
+    fun updateRecepteurInterne(recepteur: String) {
+        _uiState.update { it.copy(recepteurInterne = recepteur) }
     }
 
     fun updatePaperStubReference(ref: String) {
@@ -392,12 +411,27 @@ class SortiesViewModel(
         referenceBon: String,
         serviceId: Long,
         localId: Long?,
-        recipient: String,
+        demandeur: String,
+        recepteurInterne: String,
+        motif: String,
         date: String
     ) {
         viewModelScope.launch {
-            validateSortieSync(referenceBon, serviceId, localId, recipient, date)
+            validateSortieSync(referenceBon, serviceId, localId, demandeur, recepteurInterne, motif, date)
         }
+    }
+
+    fun validateSortie(
+        referenceBon: String,
+        serviceId: Long,
+        localId: Long?,
+        recipient: String,
+        date: String
+    ) {
+        val state = _uiState.value
+        val dem = state.demandeur.ifBlank { recipient }
+        val rec = state.recepteurInterne.ifBlank { recipient }
+        validateSortie(referenceBon, serviceId, localId, dem, rec, state.motive, date)
     }
 
     fun validateSortieSync(
@@ -405,6 +439,21 @@ class SortiesViewModel(
         serviceId: Long,
         localId: Long?,
         recipient: String,
+        date: String
+    ): Boolean {
+        val state = _uiState.value
+        val dem = state.demandeur.ifBlank { recipient }
+        val rec = state.recepteurInterne.ifBlank { recipient }
+        return validateSortieSync(referenceBon, serviceId, localId, dem, rec, state.motive, date)
+    }
+
+    fun validateSortieSync(
+        referenceBon: String,
+        serviceId: Long,
+        localId: Long?,
+        demandeur: String,
+        recepteurInterne: String,
+        motif: String,
         date: String
     ): Boolean {
         val state = _uiState.value
@@ -424,7 +473,7 @@ class SortiesViewModel(
             return false
         }
 
-        val issueDateStr = date.ifBlank { "2026-09-08 10:30" }
+        val issueDateStr = date.ifBlank { currentFormattedDateTime() }
 
         try {
             database.transaction {
@@ -433,7 +482,10 @@ class SortiesViewModel(
                     reference_bon = referenceBon.trim(),
                     service_id = serviceId,
                     local_id = localId,
-                    date = issueDateStr
+                    date = issueDateStr,
+                    demandeur = demandeur.trim(),
+                    recepteur_interne = recepteurInterne.trim(),
+                    motif = motif.trim()
                 )
                 val sortieId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
@@ -464,6 +516,11 @@ class SortiesViewModel(
                     actionErrorMessage = null,
                     systemReference = nextRef,
                     paperStubReference = "BSP-${(4400 + nextId)}",
+                    issueDate = currentFormattedDateTime(),
+                    demandeur = "",
+                    recepteurInterne = "",
+                    recipientName = "",
+                    motive = "",
                     draftLines = persistentListOf(),
                     totalUnitsIssued = 0.0,
                     totalValuationDzd = 0.0
