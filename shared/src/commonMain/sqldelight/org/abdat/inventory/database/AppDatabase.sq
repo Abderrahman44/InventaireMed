@@ -33,7 +33,8 @@ CREATE TABLE convention (
     ord_number INTEGER NOT NULL,
     date TEXT NOT NULL,
     global_unit_price REAL NOT NULL DEFAULT 0.0,
-    total_montant REAL NOT NULL DEFAULT 0.0
+    total_montant REAL NOT NULL DEFAULT 0.0,
+    tva_rate REAL NOT NULL DEFAULT 0.0
 );
 
 -- 3. Convention Items (Agreed products under a convention)
@@ -50,7 +51,8 @@ CREATE TABLE convention_item (
 CREATE TABLE service (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    local_num TEXT NOT NULL DEFAULT ''
+    local_num TEXT NOT NULL DEFAULT '',
+    chef_id INTEGER REFERENCES person(id) ON DELETE SET NULL
 );
 
 -- 5. Internal Organization: Local (Room/Storage area)
@@ -64,6 +66,7 @@ CREATE TABLE local (
 CREATE TABLE stock_article (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     code_article TEXT NOT NULL UNIQUE,
+    additional_reference_id TEXT NOT NULL DEFAULT '',
     designation TEXT NOT NULL,
     unite_quantite TEXT NOT NULL,
     family TEXT NOT NULL DEFAULT '',
@@ -71,7 +74,21 @@ CREATE TABLE stock_article (
     quantity REAL NOT NULL DEFAULT 0.0,
     unit_price REAL NOT NULL DEFAULT 0.0,
     expiration_date TEXT,
+    is_archived INTEGER NOT NULL DEFAULT 0,
+    is_obsolete INTEGER NOT NULL DEFAULT 0,
     date TEXT NOT NULL
+);
+
+-- 6b. Article Audit Log
+CREATE TABLE article_audit_log (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    article_id INTEGER NOT NULL REFERENCES stock_article(id) ON DELETE CASCADE,
+    field_name TEXT NOT NULL,
+    old_value TEXT NOT NULL DEFAULT '',
+    new_value TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL,
+    user_name TEXT NOT NULL DEFAULT 'Admin',
+    edit_date TEXT NOT NULL
 );
 
 -- ============================================================================
@@ -105,7 +122,9 @@ CREATE TABLE bon_de_livraison (
     reference_bon TEXT NOT NULL,
     fournisseur_id INTEGER NOT NULL REFERENCES fournisseur(id) ON DELETE RESTRICT,
     date_livraison TEXT NOT NULL,
-    commande_id INTEGER REFERENCES bon_de_commande(id) ON DELETE SET NULL
+    commande_id INTEGER REFERENCES bon_de_commande(id) ON DELETE SET NULL,
+    service_id INTEGER REFERENCES service(id) ON DELETE SET NULL,
+    beneficiaire_id INTEGER REFERENCES person(id) ON DELETE SET NULL
 );
 
 CREATE TABLE livraison_item (
@@ -134,6 +153,66 @@ CREATE TABLE sortie_item (
     quantity REAL NOT NULL
 );
 
+-- 10. Papier de Décharge (Gifts & Donations Inflow)
+CREATE TABLE papier_decharge (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    reference_bon TEXT NOT NULL UNIQUE,
+    organization_name TEXT NOT NULL,
+    donor_name TEXT NOT NULL DEFAULT '',
+    date TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE decharge_item (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    decharge_id INTEGER NOT NULL REFERENCES papier_decharge(id) ON DELETE CASCADE,
+    code_article TEXT NOT NULL,
+    designation TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    unit_price REAL NOT NULL DEFAULT 0.0
+);
+
+-- 11. Personnel & Equipment Allocation (Dotation)
+CREATE TABLE person (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL REFERENCES service(id) ON DELETE CASCADE,
+    full_name TEXT NOT NULL,
+    birth_date TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE equipment_assignment (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    person_id INTEGER NOT NULL REFERENCES person(id) ON DELETE CASCADE,
+    article_id INTEGER NOT NULL REFERENCES stock_article(id) ON DELETE RESTRICT,
+    quantity REAL NOT NULL DEFAULT 1.0,
+    assigned_date TEXT NOT NULL,
+    return_date TEXT,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    notes TEXT NOT NULL DEFAULT ''
+);
+
+-- 12. Dynamic Configurations & User Preferences
+CREATE TABLE dynamic_config_item (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    code TEXT NOT NULL,
+    label TEXT NOT NULL,
+    parent_category TEXT NOT NULL DEFAULT '',
+    parent_code TEXT NOT NULL DEFAULT '',
+    is_active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE user_profile (
+    id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
+    full_name TEXT NOT NULL DEFAULT 'Administrateur',
+    phone TEXT NOT NULL DEFAULT '',
+    email TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'Responsable Stock',
+    theme_mode TEXT NOT NULL DEFAULT 'LIGHT',
+    locale TEXT NOT NULL DEFAULT 'FR'
+);
+
 -- ============================================================================
 -- Database Indexes
 -- ============================================================================
@@ -142,15 +221,25 @@ CREATE INDEX idx_convention_fournisseur ON convention(fournisseur_id);
 CREATE INDEX idx_convention_item_convention ON convention_item(convention_id);
 CREATE INDEX idx_local_service ON local(service_id);
 CREATE INDEX idx_stock_article_code ON stock_article(code_article);
+CREATE INDEX idx_stock_article_barcode ON stock_article(additional_reference_id);
 CREATE INDEX idx_stock_article_designation ON stock_article(designation);
 CREATE INDEX idx_stock_article_family ON stock_article(family);
+CREATE INDEX idx_audit_article ON article_audit_log(article_id);
 CREATE INDEX idx_commande_fournisseur ON bon_de_commande(fournisseur_id);
 CREATE INDEX idx_commande_item_commande ON commande_item(commande_id);
 CREATE INDEX idx_commande_item_convention ON commande_item(convention_item_id);
 CREATE INDEX idx_livraison_fournisseur ON bon_de_livraison(fournisseur_id);
+CREATE INDEX idx_livraison_service ON bon_de_livraison(service_id);
+CREATE INDEX idx_livraison_beneficiaire ON bon_de_livraison(beneficiaire_id);
 CREATE INDEX idx_livraison_item_livraison ON livraison_item(livraison_id);
 CREATE INDEX idx_sortie_service ON bon_de_sortie(service_id);
 CREATE INDEX idx_sortie_item_sortie ON sortie_item(sortie_id);
+CREATE INDEX idx_decharge_ref ON papier_decharge(reference_bon);
+CREATE INDEX idx_decharge_item_decharge ON decharge_item(decharge_id);
+CREATE INDEX idx_person_service ON person(service_id);
+CREATE INDEX idx_assignment_person ON equipment_assignment(person_id);
+CREATE INDEX idx_assignment_article ON equipment_assignment(article_id);
+CREATE INDEX idx_config_category ON dynamic_config_item(category);
 
 -- ============================================================================
 -- Utility Queries
@@ -207,16 +296,19 @@ selectConventionsByFournisseur:
 SELECT * FROM convention WHERE fournisseur_id = ? ORDER BY date DESC;
 
 insertConvention:
-INSERT INTO convention (fournisseur_id, ord_number, date, global_unit_price, total_montant)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO convention (fournisseur_id, ord_number, date, global_unit_price, total_montant, tva_rate)
+VALUES (?, ?, ?, ?, ?, ?);
 
 updateConvention:
 UPDATE convention 
-SET fournisseur_id = ?, ord_number = ?, date = ?, global_unit_price = ?, total_montant = ? 
+SET fournisseur_id = ?, ord_number = ?, date = ?, global_unit_price = ?, total_montant = ?, tva_rate = ? 
 WHERE id = ?;
 
 deleteConvention:
 DELETE FROM convention WHERE id = ?;
+
+selectAllConventionItems:
+SELECT * FROM convention_item;
 
 selectConventionItemsByConventionId:
 SELECT * FROM convention_item WHERE convention_id = ? ORDER BY designation ASC;
@@ -276,14 +368,35 @@ ORDER BY ci.designation ASC;
 selectAllServices:
 SELECT * FROM service ORDER BY name ASC;
 
+selectAllServicesWithChef:
+SELECT s.*, p.full_name AS chef_name
+FROM service s
+LEFT JOIN person p ON s.chef_id = p.id
+ORDER BY s.name ASC;
+
 selectServiceById:
 SELECT * FROM service WHERE id = ?;
+
+selectServiceByIdWithChef:
+SELECT s.*, p.full_name AS chef_name
+FROM service s
+LEFT JOIN person p ON s.chef_id = p.id
+WHERE s.id = ?;
 
 insertService:
 INSERT INTO service (name, local_num) VALUES (?, ?);
 
+insertServiceWithChef:
+INSERT INTO service (name, local_num, chef_id) VALUES (?, ?, ?);
+
 updateService:
 UPDATE service SET name = ?, local_num = ? WHERE id = ?;
+
+updateServiceChef:
+UPDATE service SET chef_id = ? WHERE id = ?;
+
+clearServiceChef:
+UPDATE service SET chef_id = NULL WHERE id = ?;
 
 deleteService:
 DELETE FROM service WHERE id = ?;
@@ -313,33 +426,53 @@ DELETE FROM local WHERE id = ?;
 selectAllStockArticles:
 SELECT * FROM stock_article ORDER BY designation ASC;
 
+selectAllActiveStockArticles:
+SELECT * FROM stock_article WHERE is_archived = 0 AND is_obsolete = 0 ORDER BY designation ASC;
+
 selectStockArticleById:
 SELECT * FROM stock_article WHERE id = ?;
 
 selectStockArticleByCode:
 SELECT * FROM stock_article WHERE code_article = ?;
 
+selectStockArticleByBarcode:
+SELECT * FROM stock_article WHERE additional_reference_id = ?;
+
+selectStockArticleByDesignation:
+SELECT * FROM stock_article WHERE designation = ?;
+
 searchStockArticles:
 SELECT * FROM stock_article 
 WHERE designation LIKE ('%' || :query || '%') 
    OR code_article LIKE ('%' || :query || '%') 
+   OR additional_reference_id LIKE ('%' || :query || '%')
    OR family LIKE ('%' || :query || '%') 
+   OR sous_family LIKE ('%' || :query || '%')
 ORDER BY designation ASC;
 
 selectLowStockArticles:
 SELECT s.*, ci.min_quantity AS alert_threshold
 FROM stock_article s
 JOIN convention_item ci ON s.designation = ci.designation
-WHERE s.quantity <= ci.min_quantity;
+WHERE s.quantity <= ci.min_quantity AND s.is_archived = 0 AND s.is_obsolete = 0;
 
 insertStockArticle:
-INSERT INTO stock_article (code_article, designation, unite_quantite, family, sous_family, quantity, unit_price, expiration_date, date)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO stock_article (code_article, additional_reference_id, designation, unite_quantite, family, sous_family, quantity, unit_price, expiration_date, is_archived, is_obsolete, date)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateStockArticle:
 UPDATE stock_article 
-SET code_article = ?, designation = ?, unite_quantite = ?, family = ?, sous_family = ?, quantity = ?, unit_price = ?, expiration_date = ?, date = ? 
+SET code_article = ?, additional_reference_id = ?, designation = ?, unite_quantite = ?, family = ?, sous_family = ?, quantity = ?, unit_price = ?, expiration_date = ?, is_archived = ?, is_obsolete = ?, date = ? 
 WHERE id = ?;
+
+archiveStockArticle:
+UPDATE stock_article SET is_archived = 1 WHERE id = ?;
+
+unarchiveStockArticle:
+UPDATE stock_article SET is_archived = 0 WHERE id = ?;
+
+markStockArticleObsolete:
+UPDATE stock_article SET is_obsolete = 1 WHERE id = ?;
 
 deleteStockArticle:
 DELETE FROM stock_article WHERE id = ?;
@@ -350,14 +483,46 @@ UPDATE stock_article
 SET quantity = quantity + ?, date = ? 
 WHERE code_article = ?;
 
+increaseStockQuantityByDesignation:
+UPDATE stock_article 
+SET quantity = quantity + ?, date = ? 
+WHERE designation = ?;
+
 decreaseStockQuantity:
 UPDATE stock_article 
 SET quantity = quantity - ?, date = ? 
 WHERE code_article = ?;
 
+decreaseStockQuantityById:
+UPDATE stock_article 
+SET quantity = quantity - ?, date = ? 
+WHERE id = ?;
+
+increaseStockQuantityById:
+UPDATE stock_article 
+SET quantity = quantity + ?, date = ? 
+WHERE id = ?;
+
 insertOrReplaceStockArticle:
-INSERT OR REPLACE INTO stock_article (id, code_article, designation, unite_quantite, family, sous_family, quantity, unit_price, expiration_date, date)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO stock_article (id, code_article, additional_reference_id, designation, unite_quantite, family, sous_family, quantity, unit_price, expiration_date, is_archived, is_obsolete, date)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- ============================================================================
+-- Article Audit Log Queries
+-- ============================================================================
+
+selectAuditLogsByArticleId:
+SELECT * FROM article_audit_log WHERE article_id = ? ORDER BY edit_date DESC, id DESC;
+
+selectAllAuditLogs:
+SELECT a.*, s.designation AS article_designation, s.code_article AS article_code
+FROM article_audit_log a
+JOIN stock_article s ON a.article_id = s.id
+ORDER BY a.edit_date DESC, a.id DESC;
+
+insertArticleAuditLog:
+INSERT INTO article_audit_log (article_id, field_name, old_value, new_value, reason, user_name, edit_date)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- ============================================================================
 -- Bon de Commande Queries
@@ -407,13 +572,19 @@ SELECT * FROM bon_de_livraison WHERE id = ?;
 selectLivraisonsByFournisseur:
 SELECT * FROM bon_de_livraison WHERE fournisseur_id = ? ORDER BY date_livraison DESC;
 
+selectLivraisonsByService:
+SELECT * FROM bon_de_livraison WHERE service_id = ? ORDER BY date_livraison DESC;
+
+selectLivraisonsByBeneficiaire:
+SELECT * FROM bon_de_livraison WHERE beneficiaire_id = ? ORDER BY date_livraison DESC;
+
 insertLivraison:
-INSERT INTO bon_de_livraison (reference_bon, fournisseur_id, date_livraison, commande_id)
-VALUES (?, ?, ?, ?);
+INSERT INTO bon_de_livraison (reference_bon, fournisseur_id, date_livraison, commande_id, service_id, beneficiaire_id)
+VALUES (?, ?, ?, ?, ?, ?);
 
 updateLivraison:
 UPDATE bon_de_livraison 
-SET reference_bon = ?, fournisseur_id = ?, date_livraison = ?, commande_id = ? 
+SET reference_bon = ?, fournisseur_id = ?, date_livraison = ?, commande_id = ?, service_id = ?, beneficiaire_id = ? 
 WHERE id = ?;
 
 deleteLivraison:
@@ -463,3 +634,142 @@ VALUES (?, ?, ?, ?);
 
 deleteSortieItem:
 DELETE FROM sortie_item WHERE id = ?;
+
+-- ============================================================================
+-- Papier de Décharge Queries (Gifts & Donations)
+-- ============================================================================
+
+selectAllDecharges:
+SELECT * FROM papier_decharge ORDER BY date DESC, id DESC;
+
+selectDechargeById:
+SELECT * FROM papier_decharge WHERE id = ?;
+
+insertDecharge:
+INSERT INTO papier_decharge (reference_bon, organization_name, donor_name, date, notes)
+VALUES (?, ?, ?, ?, ?);
+
+deleteDecharge:
+DELETE FROM papier_decharge WHERE id = ?;
+
+selectDechargeItemsByDechargeId:
+SELECT * FROM decharge_item WHERE decharge_id = ? ORDER BY designation ASC;
+
+insertDechargeItem:
+INSERT INTO decharge_item (decharge_id, code_article, designation, quantity, unit_price)
+VALUES (?, ?, ?, ?, 0.0);
+
+deleteDechargeItem:
+DELETE FROM decharge_item WHERE id = ?;
+
+-- ============================================================================
+-- Personnel Queries
+-- ============================================================================
+
+selectAllPersons:
+SELECT p.*, s.name AS service_name, (CASE WHEN s.chef_id = p.id THEN 1 ELSE 0 END) AS is_chef
+FROM person p
+JOIN service s ON p.service_id = s.id
+ORDER BY p.full_name ASC;
+
+selectPersonsByServiceId:
+SELECT p.*, s.name AS service_name, (CASE WHEN s.chef_id = p.id THEN 1 ELSE 0 END) AS is_chef
+FROM person p
+JOIN service s ON p.service_id = s.id
+WHERE p.service_id = ?
+ORDER BY p.full_name ASC;
+
+selectPersonById:
+SELECT p.*, s.name AS service_name, (CASE WHEN s.chef_id = p.id THEN 1 ELSE 0 END) AS is_chef
+FROM person p
+JOIN service s ON p.service_id = s.id
+WHERE p.id = ?;
+
+selectChefByServiceId:
+SELECT p.*, s.name AS service_name, 1 AS is_chef
+FROM person p
+JOIN service s ON s.chef_id = p.id
+WHERE s.id = ?;
+
+insertPerson:
+INSERT INTO person (service_id, full_name, birth_date, notes)
+VALUES (?, ?, ?, ?);
+
+updatePerson:
+UPDATE person SET service_id = ?, full_name = ?, birth_date = ?, notes = ? WHERE id = ?;
+
+deletePerson:
+DELETE FROM person WHERE id = ?;
+
+-- ============================================================================
+-- Equipment Assignment (Dotation) Queries
+-- ============================================================================
+
+selectAllAssignments:
+SELECT a.*, p.full_name AS person_name, s.designation AS article_designation, s.code_article AS article_code, s.unite_quantite AS unite
+FROM equipment_assignment a
+JOIN person p ON a.person_id = p.id
+JOIN stock_article s ON a.article_id = s.id
+ORDER BY a.assigned_date DESC, a.id DESC;
+
+selectAssignmentsByPersonId:
+SELECT a.*, p.full_name AS person_name, s.designation AS article_designation, s.code_article AS article_code, s.unite_quantite AS unite
+FROM equipment_assignment a
+JOIN person p ON a.person_id = p.id
+JOIN stock_article s ON a.article_id = s.id
+WHERE a.person_id = ?
+ORDER BY a.assigned_date DESC, a.id DESC;
+
+insertEquipmentAssignment:
+INSERT INTO equipment_assignment (person_id, article_id, quantity, assigned_date, return_date, status, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+returnEquipmentAssignment:
+UPDATE equipment_assignment
+SET return_date = ?, status = 'RETURNED'
+WHERE id = ?;
+
+-- ============================================================================
+-- Dynamic Configurations Queries
+-- ============================================================================
+
+selectAllConfigItems:
+SELECT * FROM dynamic_config_item ORDER BY category ASC, label ASC;
+
+selectConfigItemsByCategory:
+SELECT * FROM dynamic_config_item WHERE category = ? AND is_active = 1 ORDER BY label ASC;
+
+insertConfigItem:
+INSERT INTO dynamic_config_item (category, code, label, parent_category, parent_code, is_active)
+VALUES (?, ?, ?, ?, ?, ?);
+
+updateConfigItem:
+UPDATE dynamic_config_item SET label = ?, parent_code = ?, is_active = ? WHERE id = ?;
+
+deleteConfigItem:
+DELETE FROM dynamic_config_item WHERE id = ?;
+
+-- Article category taxonomy. Rows of every activity state are returned so the configuration screen
+-- can still list and delete inactive ones; CategoryTaxonomy narrows to active rows for selection.
+selectAllCategoryItems:
+SELECT * FROM dynamic_config_item
+WHERE category IN ('FAMILY', 'SOUS_FAMILY')
+ORDER BY label ASC;
+
+-- Category usage across all articles, archived and obsolete included. Grouped on the raw labels and
+-- matched in Kotlin: SQLite's LOWER() folds ASCII only, so 'MATÉRIEL' and 'matériel' would not meet.
+selectArticleCategoryUsage:
+SELECT family, sous_family, COUNT(*) AS article_count
+FROM stock_article
+GROUP BY family, sous_family;
+
+-- ============================================================================
+-- User Profile Queries
+-- ============================================================================
+
+getUserProfile:
+SELECT * FROM user_profile WHERE id = 1;
+
+insertOrUpdateUserProfile:
+INSERT OR REPLACE INTO user_profile (id, full_name, phone, email, role, theme_mode, locale)
+VALUES (1, ?, ?, ?, ?, ?, ?);

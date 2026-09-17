@@ -1,7 +1,6 @@
 package org.abdat.inventory.ui.navigation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,39 +14,85 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Domain
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.abdat.inventory.theme.AppLanguage
+import org.abdat.inventory.theme.AppStrings
 import org.abdat.inventory.theme.AppTheme
+import org.abdat.inventory.theme.ThemeMode
 
-enum class AppScreenRoute(val title: String, val iconSymbol: String, val subtitle: String) {
-    INVENTORY("Gestion de Stock", "📦", "Catalogue général & valorisation"),
-    SUPPLIERS("Fournisseurs", "🏢", "Conventions-cadres & quotas"),
-    ORDERS("Commandes", "📋", "Bons de commande & réceptions"),
-    DASHBOARD("Tableau de Bord", "📊", "Aperçu général & indicateurs")
+enum class AppScreenRoute(val fallbackTitle: String, val icon: ImageVector, val subtitle: String) {
+    INVENTORY("Gestion de Stock", Icons.Default.Inventory2, "Catalogue général & valorisation"),
+    SUPPLIERS("Fournisseurs", Icons.Default.Business, "Conventions-cadres & quotas"),
+    ORDERS("Commandes", Icons.AutoMirrored.Filled.ReceiptLong, "Bons de commande & réceptions"),
+    DELIVERIES("Livraisons", Icons.Default.LocalShipping, "Réceptions & entrées en stock"),
+    SORTIES("Sorties Matériel", Icons.AutoMirrored.Filled.ExitToApp, "Bons de sortie & consommation interne"),
+    DECHARGES("Dons & Donations", Icons.Default.CardGiftcard, "Donations & entrées sans incidence budgétaire"),
+    SERVICES("Services & Locaux", Icons.Default.Domain, "Structure organisationnelle"),
+    PERSONNEL("Personnel", Icons.Default.Badge, "Répertoire des collaborateurs & chefs de service"),
+    CONFIG("Paramètres & Config", Icons.Default.Settings, "Configuration dynamique & profil"),
+    DASHBOARD("Tableau de Bord", Icons.Default.Dashboard, "Aperçu général & indicateurs")
+}
+
+fun AppScreenRoute.localizedTitle(strings: AppStrings): String = when (this) {
+    AppScreenRoute.INVENTORY -> strings.navInventory
+    AppScreenRoute.SUPPLIERS -> strings.navSuppliers
+    AppScreenRoute.ORDERS -> strings.navOrders
+    AppScreenRoute.DELIVERIES -> strings.navDeliveries
+    AppScreenRoute.SORTIES -> strings.navSorties
+    AppScreenRoute.DECHARGES -> strings.navDecharges
+    AppScreenRoute.SERVICES -> strings.navServices
+    AppScreenRoute.PERSONNEL -> strings.navPersonnel
+    AppScreenRoute.CONFIG -> strings.navConfig
+    AppScreenRoute.DASHBOARD -> strings.navDashboard
 }
 
 @Composable
 fun MainNavigationShell(
     currentRoute: AppScreenRoute,
     onNavigate: (AppScreenRoute) -> Unit,
+    themeMode: ThemeMode = ThemeMode.LIGHT,
+    onToggleTheme: () -> Unit = {},
+    language: AppLanguage = AppLanguage.FR,
+    onToggleLanguage: () -> Unit = {},
+    userFullName: String = "Dr. Amina Mansouri",
+    userRole: String = "Chef Pharmacien / Responsable Stock",
     content: @Composable () -> Unit
 ) {
+    val strings = AppTheme.strings
+
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -65,56 +110,90 @@ fun MainNavigationShell(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(14.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Top Brand & Platform Info
-                Column {
+                // Top Section (Brand, Status & Toggles)
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)
+                ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = "IM",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "IM",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                            }
+
+                            Column {
+                                Text(
+                                    text = strings.appTitle,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = (-0.3).sp
+                                    ),
+                                    color = AppTheme.colors.textPrimary
+                                )
+                                Text(
+                                    text = strings.appSubtitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.colors.textSecondary
+                                )
+                            }
                         }
 
-                        Column {
-                            Text(
-                                text = "InventaireMed",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = (-0.3).sp
-                                ),
-                                color = AppTheme.colors.textPrimary
-                            )
-                            Text(
-                                text = "Gestion Industrielle & Médicale",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AppTheme.colors.textSecondary
-                            )
+                        // Theme & Language Switchers in Header
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            IconButton(
+                                onClick = onToggleTheme,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (themeMode == ThemeMode.DARK) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                    contentDescription = "Toggle Theme",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            IconButton(
+                                onClick = onToggleLanguage,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Translate,
+                                    contentDescription = "Toggle Language",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                    // Warehouse / Depot indicator badge
+                    // Depot indicator badge
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                                 RoundedCornerShape(8.dp)
                             )
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -126,57 +205,64 @@ fun MainNavigationShell(
                                     .background(AppTheme.colors.statusSuccess, CircleShape)
                             )
                             Text(
-                                text = "Plateforme A • Quai 03",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                                text = "Plateforme A • Quai 03 • " + if (language == AppLanguage.FR) "FR" else "EN",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // Nav Menu Items
                     Text(
-                        text = "MENU PRINCIPAL",
+                        text = strings.mainNavigation,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp
                         ),
                         color = AppTheme.colors.textSecondary.copy(alpha = 0.8f),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     listOf(
                         AppScreenRoute.INVENTORY,
                         AppScreenRoute.SUPPLIERS,
                         AppScreenRoute.ORDERS,
+                        AppScreenRoute.DELIVERIES,
+                        AppScreenRoute.SORTIES,
+                        AppScreenRoute.DECHARGES,
+                        AppScreenRoute.SERVICES,
+                        AppScreenRoute.PERSONNEL,
+                        AppScreenRoute.CONFIG,
                         AppScreenRoute.DASHBOARD
                     ).forEach { route ->
                         val isSelected = route == currentRoute
                         SidebarNavItem(
-                            title = route.title,
-                            iconSymbol = route.iconSymbol,
+                            title = route.localizedTitle(strings),
+                            icon = route.icon,
                             isSelected = isSelected,
                             onClick = { onNavigate(route) }
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                     }
                 }
 
                 // Footer Profile / User details
                 Column {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .clickable { onNavigate(AppScreenRoute.CONFIG) }
                             .padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -187,18 +273,25 @@ fun MainNavigationShell(
                                 .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("👤", fontSize = 14.sp)
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Profil",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Responsable Stock",
+                                text = userFullName,
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = AppTheme.colors.textPrimary
+                                color = AppTheme.colors.textPrimary,
+                                maxLines = 1
                             )
                             Text(
-                                text = "Pharmacie Centrale",
+                                text = userRole,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = AppTheme.colors.textSecondary
+                                color = AppTheme.colors.textSecondary,
+                                maxLines = 1
                             )
                         }
                     }
@@ -220,7 +313,7 @@ fun MainNavigationShell(
 @Composable
 private fun SidebarNavItem(
     title: String,
-    iconSymbol: String,
+    icon: ImageVector,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
@@ -242,20 +335,24 @@ private fun SidebarNavItem(
             .clip(RoundedCornerShape(8.dp))
             .background(backgroundColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(
-            text = iconSymbol,
-            fontSize = 15.sp
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = contentColor
         )
         Text(
             text = title,
             style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = 13.sp
             ),
-            color = contentColor
+            color = contentColor,
+            maxLines = 1
         )
     }
 }

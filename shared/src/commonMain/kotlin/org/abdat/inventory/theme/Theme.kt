@@ -3,6 +3,7 @@ package org.abdat.inventory.theme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -36,6 +37,31 @@ val LightColorScheme = lightColorScheme(
     outlineVariant = OutlineVariant
 )
 
+val DarkColorScheme = darkColorScheme(
+    primary = DarkPrimary,
+    onPrimary = DarkOnPrimary,
+    primaryContainer = DarkPrimaryContainer,
+    onPrimaryContainer = DarkOnPrimaryContainer,
+    secondary = DarkSecondary,
+    onSecondary = DarkOnSecondary,
+    secondaryContainer = DarkSecondaryContainer,
+    onSecondaryContainer = DarkOnSecondaryContainer,
+    background = DarkBackground,
+    onBackground = DarkOnBackground,
+    surface = DarkSurface,
+    onSurface = DarkOnSurface,
+    surfaceVariant = DarkSurfaceContainerHighest,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    inverseSurface = DarkInverseSurface,
+    inverseOnSurface = DarkInverseOnSurface,
+    error = Error,
+    onError = OnError,
+    errorContainer = ErrorContainer,
+    onErrorContainer = OnErrorContainer,
+    outline = DarkOutline,
+    outlineVariant = DarkOutlineVariant
+)
+
 val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(2.dp),
     small = RoundedCornerShape(4.dp),
@@ -57,20 +83,48 @@ object AppTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalStockSpacing.current
+
+    val strings: AppStrings
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalAppStrings.current
+
+    val mode: ThemeMode
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalThemeMode.current
 }
 
 @Composable
 fun AppTheme(
-    customColors: StockCustomColors = StockCustomColors(),
+    themeMode: ThemeMode = ThemeMode.LIGHT,
+    language: AppLanguage = AppLanguage.FR,
+    customColors: StockCustomColors? = null,
     spacing: StockSpacing = StockSpacing(),
     content: @Composable () -> Unit
 ) {
+    val activeColors = customColors ?: if (themeMode == ThemeMode.DARK) {
+        StockCustomColors(
+            backgroundSlate = DarkBackgroundSlate,
+            surfaceWhite = DarkSurfaceWhite,
+            textPrimary = DarkTextPrimary,
+            textSecondary = DarkTextSecondary
+        )
+    } else {
+        StockCustomColors()
+    }
+
+    val activeStrings = if (language == AppLanguage.EN) EnStrings else FrStrings
+    val colorScheme = if (themeMode == ThemeMode.DARK) DarkColorScheme else LightColorScheme
+
     CompositionLocalProvider(
-        LocalStockColors provides customColors,
-        LocalStockSpacing provides spacing
+        LocalStockColors provides activeColors,
+        LocalStockSpacing provides spacing,
+        LocalAppStrings provides activeStrings,
+        LocalThemeMode provides themeMode
     ) {
         MaterialTheme(
-            colorScheme = LightColorScheme,
+            colorScheme = colorScheme,
             typography = AppTypography,
             shapes = AppShapes,
             content = content

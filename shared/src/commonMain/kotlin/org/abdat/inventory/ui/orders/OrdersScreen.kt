@@ -17,6 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +40,20 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import org.abdat.inventory.ui.components.AppDatePickerField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.abdat.inventory.domain.model.Convention
@@ -64,6 +86,17 @@ fun OrdersScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    var orderToDelete by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+
+    // Dedicated Order Detail Drill-down View
+    state.selectedOrderForDetail?.let { detailData ->
+        OrderDetailScreen(
+            data = detailData,
+            onBack = { viewModel.selectOrderForDetail(null) },
+            modifier = modifier
+        )
+        return
+    }
 
     Column(
         modifier = modifier
@@ -98,7 +131,12 @@ fun OrdersScreen(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("📋", fontSize = 20.sp)
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
 
                     Column {
@@ -163,7 +201,7 @@ fun OrdersScreen(
                 title = "Commandes en Cours",
                 value = "${state.activeOrdersCount} BC",
                 subtitle = "Registre actif",
-                iconLabel = "📑",
+                icon = Icons.Default.ReceiptLong,
                 accentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
@@ -171,7 +209,7 @@ fun OrdersScreen(
                 title = "Montant Engagé (DZD)",
                 value = "${state.totalCommittedDzd.toLong()} DZD",
                 subtitle = "Total engagé validé",
-                iconLabel = "💵",
+                icon = Icons.Default.Payments,
                 accentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
@@ -179,7 +217,7 @@ fun OrdersScreen(
                 title = "Réceptions en Attente",
                 value = "${state.pendingDeliveriesCount} BL",
                 subtitle = "Livraisons programmées",
-                iconLabel = "🚚",
+                icon = Icons.Default.LocalShipping,
                 accentColor = AppTheme.colors.statusWarning,
                 modifier = Modifier.weight(1f)
             )
@@ -187,7 +225,7 @@ fun OrdersScreen(
                 title = "Conventions Suivies",
                 value = "${state.strainedConventionsCount} Cadres",
                 subtitle = "Quotas sous contrôle",
-                iconLabel = "⚖️",
+                icon = Icons.Default.Gavel,
                 accentColor = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.weight(1f)
             )
@@ -228,11 +266,13 @@ fun OrdersScreen(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
+            val tableScrollState = rememberScrollState()
             Column(modifier = Modifier.fillMaxSize()) {
                 // Table Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(tableScrollState)
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -241,43 +281,75 @@ fun OrdersScreen(
                     Text("FOURNISSEUR", modifier = Modifier.weight(2.2f), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("DATE ÉMISSION", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("LIGNES", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
-                    Text("MONTANT TOTAL (DZD)", modifier = Modifier.width(160.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("MONTANT TOTAL (TTC)", modifier = Modifier.width(160.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("PROGRESSION RÉCEPTION", modifier = Modifier.width(160.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("STATUT", modifier = Modifier.width(130.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
-                    Text("ACTIONS", modifier = Modifier.width(70.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("ACTIONS", modifier = Modifier.width(80.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                 // Table Rows
-                if (state.filteredOrders.isEmpty()) {
+                if (state.isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else if (state.filteredOrders.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = if (state.searchQuery.isEmpty()) "Aucun bon de commande enregistré." else "Aucun bon de commande correspondant à « ${state.searchQuery} ».",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp).padding(bottom = 16.dp),
+                                tint = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                text = "Aucun bon de commande trouvé",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(onClick = { 
+                                viewModel.onSearchQueryChange("")
+                                viewModel.onFilterChange(OrderStatusFilter.ALL)
+                            }) {
+                                Text("Réinitialiser les filtres")
+                            }
+                        }
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(state.filteredOrders, key = { it.commande.id }) { item ->
+                        items(state.filteredOrders, key = { it.commande.id }, contentType = { "order_row" }) { item ->
                             Row(
                                 modifier = Modifier
+                                    .animateItem()
                                     .fillMaxWidth()
+                                    .horizontalScroll(tableScrollState)
+                                    .clickable { viewModel.selectOrderForDetail(item.commande.id) }
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = item.commande.referenceBon,
-                                    modifier = Modifier.width(180.dp),
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                Column(modifier = Modifier.width(180.dp)) {
+                                    Text(
+                                        text = item.commande.referenceBon,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    if (item.linkedDeliveriesCount > 0) {
+                                        Text(
+                                            text = "${item.linkedDeliveriesCount} BL • ${item.linkedDeliveryRefs.joinToString(", ")}",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                            color = AppTheme.colors.textSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                                 Text(
                                     text = item.supplierName,
                                     modifier = Modifier.weight(2.2f),
@@ -296,16 +368,41 @@ fun OrdersScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
-                                Text(
-                                    text = "${item.totalAmountDzd.toLong()} DZD",
-                                    modifier = Modifier.width(160.dp),
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = AppTheme.colors.textPrimary
-                                )
+                                Column(modifier = Modifier.width(160.dp)) {
+                                    Text(
+                                        text = "${item.totalAmountDzd.toLong()} DZD",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                    if (item.tvaRate > 0) {
+                                        Text(
+                                            text = "HT: ${item.subtotalHtDzd.toLong()} DZD (${item.tvaRate}%)",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            color = AppTheme.colors.textSecondary
+                                        )
+                                    }
+                                }
 
                                 // Progress
                                 Column(modifier = Modifier.width(160.dp).padding(end = 16.dp)) {
-                                    Text("${item.progressPercent}%", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${item.progressPercent}%",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = AppTheme.colors.textPrimary
+                                        )
+                                        if (item.linkedDeliveriesCount > 0) {
+                                            Text(
+                                                text = "${item.linkedDeliveriesCount} BL",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                color = AppTheme.colors.textSecondary
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     LinearProgressIndicator(
                                         progress = { item.progressPercent / 100f },
@@ -313,7 +410,11 @@ fun OrdersScreen(
                                             .fillMaxWidth()
                                             .height(5.dp)
                                             .clip(RoundedCornerShape(3.dp)),
-                                        color = if (item.progressPercent >= 100) AppTheme.colors.statusSuccess else MaterialTheme.colorScheme.primary,
+                                        color = when {
+                                            item.progressPercent >= 100 -> AppTheme.colors.statusSuccess
+                                            item.progressPercent > 0 -> AppTheme.colors.statusWarning
+                                            else -> MaterialTheme.colorScheme.primary
+                                        },
                                         trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                     )
                                 }
@@ -321,10 +422,18 @@ fun OrdersScreen(
                                 // Status Badge
                                 Box(modifier = Modifier.width(130.dp)) {
                                     val (badgeBg, badgeFg) = when {
-                                        item.statusLabel.contains("Dette") -> AppTheme.colors.statusUrgentContainer to AppTheme.colors.onStatusUrgent
-                                        item.statusLabel.contains("Validé") -> AppTheme.colors.statusSuccessContainer to AppTheme.colors.onStatusSuccess
-                                        item.statusLabel.contains("Brouillon") -> MaterialTheme.colorScheme.surfaceContainerHighest to AppTheme.colors.textSecondary
-                                        else -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.primary
+                                        item.statusLabel.contains("Soldé") || item.statusLabel.contains("Clôturé") ->
+                                            AppTheme.colors.statusSuccessContainer to AppTheme.colors.onStatusSuccess
+                                        item.statusLabel.contains("Partiellement") ->
+                                            AppTheme.colors.statusWarningContainer to AppTheme.colors.onStatusWarning
+                                        item.statusLabel.contains("Dette") ->
+                                            AppTheme.colors.statusUrgentContainer to AppTheme.colors.onStatusUrgent
+                                        item.statusLabel.contains("Validé") ->
+                                            MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.primary
+                                        item.statusLabel.contains("Brouillon") ->
+                                            MaterialTheme.colorScheme.surfaceContainerHighest to AppTheme.colors.textSecondary
+                                        else ->
+                                            MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.primary
                                     }
                                     AppBadge(
                                         text = item.statusLabel,
@@ -334,15 +443,33 @@ fun OrdersScreen(
                                 }
 
                                 // Actions
-                                Row(modifier = Modifier.width(70.dp)) {
-                                    Text(
-                                        text = "🗑️",
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable { viewModel.deleteOrder(item.commande.id) }
-                                            .padding(4.dp),
-                                        fontSize = 13.sp
-                                    )
+                                Row(
+                                    modifier = Modifier.width(80.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = { viewModel.selectOrderForDetail(item.commande.id) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "Détails de la commande",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { orderToDelete = item.commande.id },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Supprimer la commande",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = AppTheme.colors.statusUrgent
+                                        )
+                                    }
                                 }
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -361,11 +488,32 @@ fun OrdersScreen(
             conventionArticles = state.articlesForConvention,
             selectedSupplierId = state.selectedSupplierId,
             selectedConventionId = state.selectedConventionId,
+            selectedConventionTvaRate = state.selectedConventionTvaRate,
             onSupplierChange = { viewModel.selectSupplierForNewOrder(it) },
             onConventionChange = { viewModel.selectConventionForNewOrder(it) },
             onDismiss = { viewModel.closeNewOrderDialog() },
             onConfirm = { ref, supplierId, date, isDebt, items ->
                 viewModel.createOrder(ref, supplierId, date, isDebt, items)
+            }
+        )
+    }
+
+    orderToDelete?.let { orderId ->
+        AlertDialog(
+            onDismissRequest = { orderToDelete = null },
+            title = { Text("Confirmer la suppression", fontWeight = FontWeight.Bold) },
+            text = { Text("Êtes-vous sûr de vouloir supprimer ce bon de commande ? Cette action est irréversible.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteOrder(orderId)
+                        orderToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AppTheme.colors.statusUrgent)
+                ) { Text("Confirmer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { orderToDelete = null }) { Text("Annuler") }
             }
         )
     }
@@ -379,6 +527,7 @@ private fun NewOrderDialog(
     conventionArticles: List<ConventionQuotaBalance>,
     selectedSupplierId: Long?,
     selectedConventionId: Long?,
+    selectedConventionTvaRate: Double = 0.0,
     onSupplierChange: (Long) -> Unit,
     onConventionChange: (Long) -> Unit,
     onDismiss: () -> Unit,
@@ -406,7 +555,10 @@ private fun NewOrderDialog(
     val enteredQty = itemQtyText.toDoubleOrNull() ?: 0.0
     val isOverQuota = selectedArticle != null && !isDebt && enteredQty > selectedArticle!!.remainingQuantity
 
-    val totalOrderAmount = draftItems.sumOf { it.subtotal }
+    val tvaRate = currentConvention?.tvaRate ?: selectedConventionTvaRate
+    val subtotalHt = draftItems.sumOf { it.subtotal }
+    val tvaAmount = subtotalHt * (tvaRate / 100.0)
+    val totalTtc = subtotalHt + tvaAmount
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -421,7 +573,8 @@ private fun NewOrderDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Header Info: Reference and Date
@@ -436,11 +589,10 @@ private fun NewOrderDialog(
                         singleLine = true,
                         modifier = Modifier.weight(1.2f)
                     )
-                    OutlinedTextField(
+                    AppDatePickerField(
                         value = date,
                         onValueChange = { date = it },
-                        label = { Text("Date (AAAA-MM-JJ)") },
-                        singleLine = true,
+                        label = "Date Commande",
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -482,7 +634,7 @@ private fun NewOrderDialog(
                         onExpandedChange = { expandedConventionDropdown = it }
                     ) {
                         OutlinedTextField(
-                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - Plafond ${currentConvention.totalMontant.toLong()} DZD" else "Sélectionner Convention",
+                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - TVA ${currentConvention.tvaRate}% - Plafond ${currentConvention.totalMontant.toLong()} DZD" else "Sélectionner Convention",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("2. Convention-Cadre Active") },
@@ -495,7 +647,7 @@ private fun NewOrderDialog(
                         ) {
                             conventions.forEach { conv ->
                                 DropdownMenuItem(
-                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - Plafond: ${conv.totalMontant.toLong()} DZD") },
+                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - TVA ${conv.tvaRate}% - Plafond: ${conv.totalMontant.toLong()} DZD") },
                                     onClick = {
                                         onConventionChange(conv.id)
                                         selectedArticle = null
@@ -511,12 +663,23 @@ private fun NewOrderDialog(
                         shape = RoundedCornerShape(6.dp),
                         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                     ) {
-                        Text(
-                            text = "ℹ️ Aucune convention-cadre active pour ce fournisseur. Vous pouvez émettre un bon hors convention en mode 'Dette'.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.onStatusWarning,
-                            modifier = Modifier.padding(8.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = AppTheme.colors.onStatusWarning
+                            )
+                            Text(
+                                text = "Aucune convention-cadre active pour ce fournisseur. Vous pouvez émettre un bon hors convention en mode 'Dette'.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.onStatusWarning
+                            )
+                        }
                     }
                 }
 
@@ -534,12 +697,65 @@ private fun NewOrderDialog(
 
                 HorizontalDivider()
 
-                // Article Selector Section
-                Text(
-                    "3. Sélectionner un Article sous Convention :",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                // Article Selector Section with Sous-Famille Filtering
+                var selectedSousFamily by remember { mutableStateOf<String?>(null) }
+                val availableSousFamilies = remember(conventionArticles) {
+                    conventionArticles.map { it.sousFamily }.filter { it.isNotBlank() }.distinct()
+                }
+                val filteredArticles = if (selectedSousFamily == null) {
+                    conventionArticles
+                } else {
+                    conventionArticles.filter { it.sousFamily.equals(selectedSousFamily, ignoreCase = true) }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "3. Sélectionner un Article sous Convention :",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                if (availableSousFamilies.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Sous-famille :", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (selectedSousFamily == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.clickable { selectedSousFamily = null }
+                        ) {
+                            Text(
+                                "Toutes",
+                                color = if (selectedSousFamily == null) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        availableSousFamilies.forEach { sf ->
+                            val isSel = selectedSousFamily.equals(sf, ignoreCase = true)
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.clickable { selectedSousFamily = sf }
+                            ) {
+                                Text(
+                                    sf,
+                                    color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
 
                 if (conventionArticles.isNotEmpty()) {
                     ExposedDropdownMenuBox(
@@ -550,7 +766,7 @@ private fun NewOrderDialog(
                             value = selectedArticle?.let { "${it.designation} (Solde dispo: ${it.remainingQuantity.toLong()} ${it.unite})" } ?: "Choisir un article...",
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Article conventionné") },
+                            label = { Text("Article conventionné (${filteredArticles.size} dispo)") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedArticleDropdown) },
                             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true).fillMaxWidth()
                         )
@@ -558,11 +774,29 @@ private fun NewOrderDialog(
                             expanded = expandedArticleDropdown,
                             onDismissRequest = { expandedArticleDropdown = false }
                         ) {
-                            conventionArticles.forEach { article ->
+                            filteredArticles.forEach { article ->
                                 DropdownMenuItem(
                                     text = {
                                         Column {
-                                            Text(article.designation, fontWeight = FontWeight.SemiBold)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(article.designation, fontWeight = FontWeight.SemiBold)
+                                                if (article.sousFamily.isNotBlank()) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                                    ) {
+                                                        Text(
+                                                            article.sousFamily,
+                                                            fontSize = 10.sp,
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
                                             Text(
                                                 "Reste: ${article.remainingQuantity.toLong()} / ${article.agreedQuantity.toLong()} ${article.unite} • Prix: ${article.unitPrice.toLong()} DZD",
                                                 style = MaterialTheme.typography.labelSmall,
@@ -614,21 +848,30 @@ private fun NewOrderDialog(
                                 onValueChange = { itemQtyText = it },
                                 label = { Text("Quantité à commander") },
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                isError = itemQtyText.toDoubleOrNull() == null || (itemQtyText.toDoubleOrNull() ?: 0.0) <= 0,
+                                supportingText = { if (itemQtyText.toDoubleOrNull() == null) Text("Veuillez saisir un nombre valide") },
                                 modifier = Modifier.weight(1f)
                             )
                             Button(
                                 onClick = {
                                     val art = selectedArticle ?: return@Button
                                     if (enteredQty > 0 && (!isOverQuota || isDebt)) {
-                                        draftItems.add(
-                                            OrderDraftItem(
-                                                conventionItemId = art.conventionItemId,
-                                                designation = art.designation,
-                                                unite = art.unite,
-                                                quantity = enteredQty,
-                                                unitPrice = art.unitPrice
+                                        val existingIndex = draftItems.indexOfFirst { it.conventionItemId == art.conventionItemId && it.designation == art.designation }
+                                        if (existingIndex >= 0) {
+                                            val existing = draftItems[existingIndex]
+                                            draftItems[existingIndex] = existing.copy(quantity = existing.quantity + enteredQty)
+                                        } else {
+                                            draftItems.add(
+                                                OrderDraftItem(
+                                                    conventionItemId = art.conventionItemId,
+                                                    designation = art.designation,
+                                                    unite = art.unite,
+                                                    quantity = enteredQty,
+                                                    unitPrice = art.unitPrice
+                                                )
                                             )
-                                        )
+                                        }
                                         selectedArticle = null
                                         itemQtyText = "10"
                                     }
@@ -641,11 +884,22 @@ private fun NewOrderDialog(
                         }
 
                         if (isOverQuota) {
-                            Text(
-                                text = "⚠️ Quantité demandée (${enteredQty.toLong()}) supérieure au solde restant (${selectedArticle!!.remainingQuantity.toLong()}) ! Cochez 'Dette Urgente' pour autoriser.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = AppTheme.colors.statusUrgent
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.WarningAmber,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = AppTheme.colors.statusUrgent
+                                )
+                                Text(
+                                    text = "Quantité demandée (${enteredQty.toLong()}) supérieure au solde restant (${selectedArticle!!.remainingQuantity.toLong()}) ! Cochez 'Dette Urgente' pour autoriser.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.colors.statusUrgent
+                                )
+                            }
                         }
                     }
                 }
@@ -663,7 +917,7 @@ private fun NewOrderDialog(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     ) {
                         LazyColumn(modifier = Modifier.padding(6.dp)) {
-                            items(draftItems) { item ->
+                            items(draftItems, key = { it.designation + it.conventionItemId }, contentType = { "draft_item" }) { item ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -679,12 +933,17 @@ private fun NewOrderDialog(
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 8.dp)
                                     )
-                                    Text(
-                                        "✕",
-                                        modifier = Modifier.clickable { draftItems.remove(item) }.padding(4.dp),
-                                        fontSize = 12.sp,
-                                        color = AppTheme.colors.statusUrgent
-                                    )
+                                    IconButton(
+                                        onClick = { draftItems.remove(item) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Retirer la ligne",
+                                            modifier = Modifier.size(14.dp),
+                                            tint = AppTheme.colors.statusUrgent
+                                        )
+                                    }
                                 }
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
                             }
@@ -692,18 +951,67 @@ private fun NewOrderDialog(
                     }
                 }
 
-                // Total Summary
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Financial Breakdown Card (HT, TVA, TTC)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Total Bon de Commande:", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
-                    Text(
-                        "${totalOrderAmount.toLong()} DZD",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Sous-total HT:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                "${subtotalHt.toLong()} DZD",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = AppTheme.colors.textPrimary
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "TVA (${tvaRate}%):",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                "${tvaAmount.toLong()} DZD",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = AppTheme.colors.textPrimary
+                            )
+                        }
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            thickness = 1.dp
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Total TTC:",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = AppTheme.colors.textPrimary
+                            )
+                            Text(
+                                "${totalTtc.toLong()} DZD",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -717,7 +1025,7 @@ private fun NewOrderDialog(
                 },
                 enabled = ref.isNotBlank() && currentSupplier != null && draftItems.isNotEmpty()
             ) {
-                Text("Émettre Bon de Commande (${draftItems.size} art.)")
+                Text("Émettre Bon de Commande (${draftItems.size} art. - ${totalTtc.toLong()} DZD TTC)")
             }
         },
         dismissButton = {

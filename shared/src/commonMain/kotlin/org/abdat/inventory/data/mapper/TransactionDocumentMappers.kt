@@ -6,12 +6,16 @@ import org.abdat.inventory.database.Bon_de_livraison as DbBonDeLivraison
 import org.abdat.inventory.database.Livraison_item as DbLivraisonItem
 import org.abdat.inventory.database.Bon_de_sortie as DbBonDeSortie
 import org.abdat.inventory.database.Sortie_item as DbSortieItem
+import org.abdat.inventory.database.Papier_decharge as DbPapierDecharge
+import org.abdat.inventory.database.Decharge_item as DbDechargeItem
 import org.abdat.inventory.domain.model.BonDeCommande
 import org.abdat.inventory.domain.model.CommandeItem
 import org.abdat.inventory.domain.model.BonDeLivraison
 import org.abdat.inventory.domain.model.LivraisonItem
 import org.abdat.inventory.domain.model.BonDeSortie
 import org.abdat.inventory.domain.model.SortieItem
+import org.abdat.inventory.domain.model.PapierDecharge
+import org.abdat.inventory.domain.model.DechargeItem
 
 fun DbBonDeCommande.toDomain(items: List<CommandeItem> = emptyList()): BonDeCommande = BonDeCommande(
     id = id,
@@ -40,6 +44,8 @@ fun DbBonDeLivraison.toDomain(items: List<LivraisonItem> = emptyList()): BonDeLi
     fournisseurId = fournisseur_id,
     dateLivraison = date_livraison,
     commandeId = commande_id,
+    serviceId = service_id,
+    beneficiaireId = beneficiaire_id,
     items = items
 )
 
@@ -67,4 +73,23 @@ fun DbSortieItem.toDomain(): SortieItem = SortieItem(
     codeArticle = code_article,
     designation = designation,
     quantity = quantity
+)
+
+fun DbPapierDecharge.toDomain(items: List<DechargeItem> = emptyList()): PapierDecharge = PapierDecharge(
+    id = id,
+    referenceBon = reference_bon,
+    organizationName = organization_name,
+    donorName = donor_name,
+    date = date,
+    notes = notes,
+    items = items
+)
+
+fun DbDechargeItem.toDomain(): DechargeItem = DechargeItem(
+    id = id,
+    dechargeId = decharge_id,
+    codeArticle = code_article,
+    designation = designation,
+    quantity = quantity,
+    unitPrice = unit_price
 )

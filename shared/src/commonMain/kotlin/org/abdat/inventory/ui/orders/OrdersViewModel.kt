@@ -1,12 +1,21 @@
 package org.abdat.inventory.ui.orders
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import org.abdat.inventory.data.mapper.toDomain
 import org.abdat.inventory.database.AppDatabase
 import org.abdat.inventory.domain.model.BonDeCommande
@@ -29,7 +38,35 @@ data class OrderDisplayItem(
     val itemsCount: Int,
     val totalAmountDzd: Double,
     val statusLabel: String,
-    val progressPercent: Int
+    val progressPercent: Int,
+    val linkedDeliveriesCount: Int = 0,
+    val linkedDeliveryRefs: ImmutableList<String> = persistentListOf(),
+    val subtotalHtDzd: Double = totalAmountDzd,
+    val tvaRate: Double = 0.0,
+    val tvaAmountDzd: Double = 0.0
+)
+
+data class LinkedLivraisonSummary(
+    val id: Long,
+    val referenceBon: String,
+    val date: String,
+    val itemsCount: Int
+)
+
+data class OrderLineFulfillmentItem(
+    val item: CommandeItem,
+    val deliveredQuantity: Double,
+    val remainingQuantity: Double,
+    val isFulfilled: Boolean,
+    val statusLabel: String
+) {
+    val totalAmount: Double get() = item.quantity * item.unitPrice
+}
+
+data class OrderDetailDisplayData(
+    val displayItem: OrderDisplayItem,
+    val lines: ImmutableList<OrderLineFulfillmentItem>,
+    val linkedDeliveries: ImmutableList<LinkedLivraisonSummary>
 )
 
 data class OrderDraftItem(
@@ -43,26 +80,30 @@ data class OrderDraftItem(
     val subtotal: Double get() = quantity * unitPrice
 }
 
+@Stable
 data class OrdersUiState(
-    val orders: List<OrderDisplayItem> = emptyList(),
-    val filteredOrders: List<OrderDisplayItem> = emptyList(),
+    val orders: ImmutableList<OrderDisplayItem> = persistentListOf(),
+    val filteredOrders: ImmutableList<OrderDisplayItem> = persistentListOf(),
     val selectedFilter: OrderStatusFilter = OrderStatusFilter.ALL,
     val searchQuery: String = "",
     val activeOrdersCount: Int = 0,
     val totalCommittedDzd: Double = 0.0,
     val pendingDeliveriesCount: Int = 0,
     val strainedConventionsCount: Int = 0,
-    val suppliers: List<Fournisseur> = emptyList(),
+    val suppliers: ImmutableList<Fournisseur> = persistentListOf(),
     val isNewOrderDialogOpen: Boolean = false,
     val selectedSupplierId: Long? = null,
-    val conventionsForSupplier: List<Convention> = emptyList(),
+    val conventionsForSupplier: ImmutableList<Convention> = persistentListOf(),
     val selectedConventionId: Long? = null,
-    val articlesForConvention: List<ConventionQuotaBalance> = emptyList(),
-    val isLoading: Boolean = false
+    val selectedConventionTvaRate: Double = 0.0,
+    val articlesForConvention: ImmutableList<ConventionQuotaBalance> = persistentListOf(),
+    val isLoading: Boolean = false,
+    val selectedOrderForDetail: OrderDetailDisplayData? = null
 )
 
 class OrdersViewModel(
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OrdersUiState())
@@ -70,6 +111,17 @@ class OrdersViewModel(
 
     init {
         loadOrdersSync()
+
+        viewModelScope.launch {
+            combine(
+                database.appDatabaseQueries.selectAllCommandes().asFlow().mapToList(dispatcher),
+                database.appDatabaseQueries.selectAllFournisseurs().asFlow().mapToList(dispatcher),
+                database.appDatabaseQueries.selectAllLivraisons().asFlow().mapToList(dispatcher)
+            ) { _, _, _ -> Unit }
+                .collect {
+                    loadOrdersSync()
+                }
+        }
     }
 
     fun loadOrders() {
@@ -83,39 +135,87 @@ class OrdersViewModel(
         val dbSuppliers = database.appDatabaseQueries.selectAllFournisseurs().executeAsList().map { it.toDomain() }
         val supplierMap = dbSuppliers.associateBy { it.id }
 
+        val allLivraisons = database.appDatabaseQueries.selectAllLivraisons().executeAsList()
+        val livraisonsByCmdId = allLivraisons.filter { it.commande_id != null }.groupBy { it.commande_id }
+
+        val allConvItems = database.appDatabaseQueries.selectAllConventionItems().executeAsList()
+        val convItemToConvId = allConvItems.associate { it.id to it.convention_id }
+        val allConventions = database.appDatabaseQueries.selectAllConventions().executeAsList()
+        val conventionMap = allConventions.associateBy { it.id }
+
         val orderItems = dbCommandes.map { dbCmd ->
             val items = database.appDatabaseQueries.selectCommandeItemsByCommandeId(dbCmd.id)
                 .executeAsList()
                 .map { it.toDomain() }
             val domainCmd = dbCmd.toDomain(items)
-            val totalAmount = items.sumOf { it.quantity * it.unitPrice }
+            val subtotalHt = items.sumOf { it.quantity * it.unitPrice }
+            val convId = items.firstNotNullOfOrNull { convItemToConvId[it.conventionItemId] }
+            val tvaRate = convId?.let { conventionMap[it]?.tva_rate } ?: 0.0
+            val tvaAmount = subtotalHt * (tvaRate / 100.0)
+            val totalTtc = subtotalHt + tvaAmount
             val supplierName = supplierMap[domainCmd.fournisseurId]?.fullName ?: "Fournisseur Inconnu"
 
-            val (status, progress) = when {
-                domainCmd.isDebt -> "Dette Urgente" to 25
-                items.isEmpty() -> "En Brouillon" to 10
-                domainCmd.id % 2L == 0L -> "Partiellement Reçu" to 65
-                else -> "Validé / Émis" to 40
+            val linkedBls = livraisonsByCmdId[dbCmd.id] ?: emptyList()
+            val linkedRefs = linkedBls.map { it.reference_bon }
+            val deliveredItems = linkedBls.flatMap { bl ->
+                database.appDatabaseQueries.selectLivraisonItemsByLivraisonId(bl.id).executeAsList()
+            }
+            val deliveredQtyMap = mutableMapOf<String, Double>()
+            deliveredItems.forEach { d ->
+                val key = if (d.code_article.isNotBlank()) d.code_article.lowercase().trim() else d.designation.lowercase().trim()
+                deliveredQtyMap[key] = (deliveredQtyMap[key] ?: 0.0) + d.quantity
+            }
+
+            val totalOrderedQty = items.sumOf { it.quantity }
+            val totalDeliveredQty = items.sumOf { item ->
+                val key = if (item.codeArticle.isNotBlank()) item.codeArticle.lowercase().trim() else item.designation.lowercase().trim()
+                (deliveredQtyMap[key] ?: 0.0).coerceAtMost(item.quantity)
+            }
+
+            val allItemsFulfilled = items.isNotEmpty() && items.all { item ->
+                val key = if (item.codeArticle.isNotBlank()) item.codeArticle.lowercase().trim() else item.designation.lowercase().trim()
+                (deliveredQtyMap[key] ?: 0.0) >= (item.quantity - 0.001)
+            }
+            val hasAnyDelivered = totalDeliveredQty > 0.001
+
+            val progress = if (totalOrderedQty > 0.0) {
+                ((totalDeliveredQty / totalOrderedQty) * 100).toInt().coerceIn(0, 100)
+            } else {
+                0
+            }
+
+            val status = when {
+                items.isEmpty() -> "En Brouillon"
+                allItemsFulfilled || progress >= 100 -> "Soldé / Clôturé"
+                hasAnyDelivered -> "Partiellement Reçu"
+                domainCmd.isDebt -> "Dette Urgente"
+                else -> "Validé / Émis"
             }
 
             OrderDisplayItem(
                 commande = domainCmd,
                 supplierName = supplierName,
                 itemsCount = items.size,
-                totalAmountDzd = totalAmount,
+                totalAmountDzd = totalTtc,
                 statusLabel = status,
-                progressPercent = progress
+                progressPercent = progress,
+                linkedDeliveriesCount = linkedBls.size,
+                linkedDeliveryRefs = linkedRefs.toImmutableList(),
+                subtotalHtDzd = subtotalHt,
+                tvaRate = tvaRate,
+                tvaAmountDzd = tvaAmount
             )
         }
 
         val totalCommitted = orderItems.sumOf { it.totalAmountDzd }
-        val pendingLivraisons = database.appDatabaseQueries.selectAllLivraisons().executeAsList().size
+        val activeOrders = orderItems.count { it.statusLabel != "Soldé / Clôturé" }
+        val pendingLivraisons = allLivraisons.size
 
         _uiState.update {
             it.copy(
-                orders = orderItems,
-                suppliers = dbSuppliers,
-                activeOrdersCount = orderItems.size,
+                orders = orderItems.toImmutableList(),
+                suppliers = dbSuppliers.toImmutableList(),
+                activeOrdersCount = activeOrders,
                 totalCommittedDzd = totalCommitted,
                 pendingDeliveriesCount = pendingLivraisons,
                 strainedConventionsCount = 2,
@@ -123,6 +223,70 @@ class OrdersViewModel(
             )
         }
         applyFilters()
+
+        val currentDetailId = _uiState.value.selectedOrderForDetail?.displayItem?.commande?.id
+        if (currentDetailId != null) {
+            loadOrderDetailSync(currentDetailId)
+        }
+    }
+
+    fun selectOrderForDetail(orderId: Long?) {
+        if (orderId == null) {
+            _uiState.update { it.copy(selectedOrderForDetail = null) }
+            return
+        }
+        loadOrderDetailSync(orderId)
+    }
+
+    fun loadOrderDetailSync(orderId: Long) {
+        val displayItem = _uiState.value.orders.firstOrNull { it.commande.id == orderId } ?: return
+        val items = database.appDatabaseQueries.selectCommandeItemsByCommandeId(orderId)
+            .executeAsList()
+            .map { it.toDomain() }
+
+        val allLivraisons = database.appDatabaseQueries.selectAllLivraisons().executeAsList()
+        val linkedBls = allLivraisons.filter { it.commande_id == orderId }
+
+        val deliveredQtyMap = mutableMapOf<String, Double>()
+        val linkedSummaries = linkedBls.map { bl ->
+            val blItems = database.appDatabaseQueries.selectLivraisonItemsByLivraisonId(bl.id).executeAsList()
+            blItems.forEach { d ->
+                val key = if (d.code_article.isNotBlank()) d.code_article.lowercase().trim() else d.designation.lowercase().trim()
+                deliveredQtyMap[key] = (deliveredQtyMap[key] ?: 0.0) + d.quantity
+            }
+            LinkedLivraisonSummary(
+                id = bl.id,
+                referenceBon = bl.reference_bon,
+                date = bl.date_livraison,
+                itemsCount = blItems.size
+            )
+        }
+
+        val lineFulfillments = items.map { item ->
+            val key = if (item.codeArticle.isNotBlank()) item.codeArticle.lowercase().trim() else item.designation.lowercase().trim()
+            val delivered = (deliveredQtyMap[key] ?: 0.0).coerceAtLeast(0.0)
+            val remaining = (item.quantity - delivered).coerceAtLeast(0.0)
+            val isFulfilled = delivered >= (item.quantity - 0.001)
+            val status = if (isFulfilled) "Livré" else "Pour livraison partielle"
+
+            OrderLineFulfillmentItem(
+                item = item,
+                deliveredQuantity = delivered,
+                remainingQuantity = remaining,
+                isFulfilled = isFulfilled,
+                statusLabel = status
+            )
+        }
+
+        _uiState.update {
+            it.copy(
+                selectedOrderForDetail = OrderDetailDisplayData(
+                    displayItem = displayItem,
+                    lines = lineFulfillments.toImmutableList(),
+                    linkedDeliveries = linkedSummaries.toImmutableList()
+                )
+            )
+        }
     }
 
     fun onSearchQueryChange(query: String) {
@@ -147,16 +311,16 @@ class OrdersViewModel(
 
             val matchesFilter = when (filter) {
                 OrderStatusFilter.ALL -> true
-                OrderStatusFilter.VALIDATED -> item.statusLabel.contains("Validé")
+                OrderStatusFilter.VALIDATED -> item.statusLabel.contains("Validé") || item.statusLabel.contains("Dette")
                 OrderStatusFilter.DRAFT -> item.statusLabel.contains("Brouillon")
-                OrderStatusFilter.RECEIVING -> item.statusLabel.contains("Reçu") || item.statusLabel.contains("Réception")
-                OrderStatusFilter.CLOSED -> item.progressPercent >= 100 || item.statusLabel.contains("Soldé")
+                OrderStatusFilter.RECEIVING -> item.statusLabel.contains("Partiellement") || item.statusLabel.contains("Reçu") || item.statusLabel.contains("Réception")
+                OrderStatusFilter.CLOSED -> item.progressPercent >= 100 || item.statusLabel.contains("Soldé") || item.statusLabel.contains("Clôturé")
             }
 
             matchesQuery && matchesFilter
         }
 
-        _uiState.update { it.copy(filteredOrders = filtered) }
+        _uiState.update { it.copy(filteredOrders = filtered.toImmutableList()) }
     }
 
     fun openNewOrderDialog() {
@@ -179,27 +343,34 @@ class OrdersViewModel(
         _uiState.update {
             it.copy(
                 selectedSupplierId = supplierId,
-                conventionsForSupplier = conventions,
-                selectedConventionId = firstConvention?.id
+                conventionsForSupplier = conventions.toImmutableList(),
+                selectedConventionId = firstConvention?.id,
+                selectedConventionTvaRate = firstConvention?.tvaRate ?: 0.0
             )
         }
 
         if (firstConvention != null) {
             selectConventionForNewOrder(firstConvention.id)
         } else {
-            _uiState.update { it.copy(articlesForConvention = emptyList()) }
+            _uiState.update { it.copy(articlesForConvention = persistentListOf(), selectedConventionTvaRate = 0.0) }
         }
     }
 
     fun selectConventionForNewOrder(conventionId: Long) {
         val stockPriceMap = database.appDatabaseQueries.selectAllStockArticles().executeAsList()
-            .associate { it.designation.lowercase().trim() to (it.unit_price to it.code_article) }
+            .associateBy { it.designation.lowercase().trim() }
+
+        val conv = _uiState.value.conventionsForSupplier.find { it.id == conventionId }
+            ?: database.appDatabaseQueries.selectConventionById(conventionId).executeAsOneOrNull()?.toDomain()
+        val tvaRate = conv?.tvaRate ?: 0.0
 
         val balances = database.appDatabaseQueries.selectConventionBalancesByConventionId(conventionId)
             .executeAsList()
             .map {
-                val stockInfo = stockPriceMap[it.designation.lowercase().trim()]
-                val price = stockInfo?.first ?: 150.0
+                val stockItem = stockPriceMap[it.designation.lowercase().trim()]
+                val price = stockItem?.unit_price ?: 150.0
+                val sousFam = stockItem?.sous_family ?: ""
+                val fam = stockItem?.family ?: ""
                 ConventionQuotaBalance(
                     conventionItemId = it.conventionItemId,
                     conventionId = it.conventionId,
@@ -209,16 +380,26 @@ class OrdersViewModel(
                     minQuantity = it.minQuantity,
                     orderedQuantity = it.orderedQuantity,
                     remainingQuantity = it.remainingQuantity,
-                    unitPrice = price
+                    unitPrice = price,
+                    sousFamily = sousFam,
+                    family = fam
                 )
             }
 
         _uiState.update {
             it.copy(
                 selectedConventionId = conventionId,
-                articlesForConvention = balances
+                selectedConventionTvaRate = tvaRate,
+                articlesForConvention = balances.toImmutableList()
             )
         }
+    }
+
+    fun calculateOrderTotals(items: List<OrderDraftItem>, tvaRate: Double): Triple<Double, Double, Double> {
+        val subtotalHt = items.sumOf { it.subtotal }
+        val tvaAmount = subtotalHt * (tvaRate / 100.0)
+        val totalTtc = subtotalHt + tvaAmount
+        return Triple(subtotalHt, tvaAmount, totalTtc)
     }
 
     fun createOrder(

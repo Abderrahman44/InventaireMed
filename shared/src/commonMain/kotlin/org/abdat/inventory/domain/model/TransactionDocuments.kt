@@ -32,6 +32,8 @@ data class BonDeLivraison(
     val fournisseurId: Long,
     val dateLivraison: String,
     val commandeId: Long? = null,
+    val serviceId: Long? = null,
+    val beneficiaireId: Long? = null,
     val items: List<LivraisonItem> = emptyList()
 )
 
@@ -62,4 +64,25 @@ data class SortieItem(
     val codeArticle: String,
     val designation: String,
     val quantity: Double
+)
+
+@Serializable
+data class PapierDecharge(
+    val id: Long = 0,
+    val referenceBon: String,
+    val organizationName: String,
+    val donorName: String = "",
+    val date: String,
+    val notes: String = "",
+    val items: List<DechargeItem> = emptyList()
+)
+
+@Serializable
+data class DechargeItem(
+    val id: Long = 0,
+    val dechargeId: Long = 0,
+    val codeArticle: String,
+    val designation: String,
+    val quantity: Double,
+    val unitPrice: Double = 0.0
 )

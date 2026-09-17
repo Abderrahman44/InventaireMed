@@ -11,8 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,10 +47,11 @@ fun AppSearchBar(
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "🔍",
-            fontSize = 13.sp,
-            color = AppTheme.colors.textSecondary
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = "Rechercher",
+            modifier = Modifier.size(16.dp),
+            tint = AppTheme.colors.textSecondary
         )
         Spacer(modifier = Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
@@ -74,7 +80,12 @@ fun AppSearchBar(
                     .clickable { onQueryChange("") }
                     .padding(4.dp)
             ) {
-                Text("✕", fontSize = 11.sp, color = AppTheme.colors.textSecondary)
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Effacer",
+                    modifier = Modifier.size(14.dp),
+                    tint = AppTheme.colors.textSecondary
+                )
             }
         }
     }

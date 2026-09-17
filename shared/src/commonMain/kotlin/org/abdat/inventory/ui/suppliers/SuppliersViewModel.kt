@@ -1,12 +1,24 @@
 package org.abdat.inventory.ui.suppliers
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import org.abdat.inventory.data.mapper.toDomain
 import org.abdat.inventory.database.AppDatabase
 import org.abdat.inventory.domain.model.Convention
@@ -36,10 +48,13 @@ data class ConventionQuotaBalance(
     val minQuantity: Double,
     val orderedQuantity: Double,
     val remainingQuantity: Double,
-    val unitPrice: Double = 0.0
+    val unitPrice: Double = 0.0,
+    val sousFamily: String = "",
+    val family: String = ""
 )
 
 data class SupplierHistoryItem(
+    val id: String = "",
     val reference: String,
     val date: String,
     val type: String,
@@ -47,15 +62,16 @@ data class SupplierHistoryItem(
     val status: String
 )
 
+@Stable
 data class SuppliersUiState(
-    val suppliers: List<Fournisseur> = emptyList(),
-    val filteredSuppliers: List<Fournisseur> = emptyList(),
+    val suppliers: ImmutableList<Fournisseur> = persistentListOf(),
+    val filteredSuppliers: ImmutableList<Fournisseur> = persistentListOf(),
     val selectedSupplier: Fournisseur? = null,
     val searchQuery: String = "",
     val activeTab: SupplierDetailTab = SupplierDetailTab.CONVENTIONS,
-    val conventions: List<Convention> = emptyList(),
-    val conventionBalances: Map<Long, List<ConventionQuotaBalance>> = emptyMap(),
-    val historyItems: List<SupplierHistoryItem> = emptyList(),
+    val conventions: ImmutableList<Convention> = persistentListOf(),
+    val conventionBalances: ImmutableMap<Long, ImmutableList<ConventionQuotaBalance>> = persistentMapOf(),
+    val historyItems: ImmutableList<SupplierHistoryItem> = persistentListOf(),
     val selectedConventionForDetail: Convention? = null,
     val isProfileViewOpen: Boolean = false,
     val isEditProfileDialogOpen: Boolean = false,
@@ -69,7 +85,8 @@ data class SuppliersUiState(
 )
 
 class SuppliersViewModel(
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SuppliersUiState())
@@ -77,6 +94,17 @@ class SuppliersViewModel(
 
     init {
         loadSuppliersSync()
+
+        viewModelScope.launch {
+            combine(
+                database.appDatabaseQueries.selectAllFournisseurs().asFlow().mapToList(dispatcher),
+                database.appDatabaseQueries.selectAllConventions().asFlow().mapToList(dispatcher),
+                database.appDatabaseQueries.selectAllLivraisons().asFlow().mapToList(dispatcher)
+            ) { _, _, _ -> Unit }
+                .collect {
+                    loadSuppliersSync()
+                }
+        }
     }
 
     fun loadSuppliers() {
@@ -95,7 +123,7 @@ class SuppliersViewModel(
 
         _uiState.update {
             it.copy(
-                suppliers = domainSuppliers,
+                suppliers = domainSuppliers.toImmutableList(),
                 selectedSupplier = selected,
                 isLoading = false
             )
@@ -128,7 +156,7 @@ class SuppliersViewModel(
         } else {
             _uiState.value.suppliers.filter { it.fullName.lowercase().contains(query) }
         }
-        _uiState.update { it.copy(filteredSuppliers = filtered) }
+        _uiState.update { it.copy(filteredSuppliers = filtered.toImmutableList()) }
     }
 
     fun loadSupplierDetails(supplierId: Long) {
@@ -150,7 +178,7 @@ class SuppliersViewModel(
             .associate { it.designation.lowercase().trim() to it.unit_price }
 
         // Quota balances for each convention
-        val balancesMap = mutableMapOf<Long, List<ConventionQuotaBalance>>()
+        val balancesMap = mutableMapOf<Long, ImmutableList<ConventionQuotaBalance>>()
         for (conv in domainConventions) {
             val balances = database.appDatabaseQueries.selectConventionBalancesByConventionId(conv.id)
                 .executeAsList()
@@ -168,7 +196,7 @@ class SuppliersViewModel(
                         unitPrice = price
                     )
                 }
-            balancesMap[conv.id] = balances
+            balancesMap[conv.id] = balances.toImmutableList()
         }
 
         // History from BCs and BLs
@@ -181,6 +209,7 @@ class SuppliersViewModel(
             val totalAmount = items.sumOf { it.quantity * it.unit_price }
             history.add(
                 SupplierHistoryItem(
+                    id = "bc_${bc.id}",
                     reference = bc.reference_bon,
                     date = bc.date,
                     type = "Bon de Commande",
@@ -194,6 +223,7 @@ class SuppliersViewModel(
             val totalAmount = items.sumOf { it.quantity * it.unit_price }
             history.add(
                 SupplierHistoryItem(
+                    id = "bl_${bl.id}",
                     reference = bl.reference_bon,
                     date = bl.date_livraison,
                     type = "Bon de Livraison",
@@ -211,9 +241,9 @@ class SuppliersViewModel(
 
         _uiState.update {
             it.copy(
-                conventions = domainConventions,
-                conventionBalances = balancesMap,
-                historyItems = history,
+                conventions = domainConventions.toImmutableList(),
+                conventionBalances = balancesMap.toImmutableMap(),
+                historyItems = history.toImmutableList(),
                 selectedConventionForDetail = updatedDetailConv ?: it.selectedConventionForDetail
             )
         }
@@ -365,16 +395,18 @@ class SuppliersViewModel(
         ordNumber: Long,
         date: String,
         totalMontant: Double,
-        items: List<ConventionDraftArticle>
+        items: List<ConventionDraftArticle>,
+        tvaRate: Double = 0.0
     ) {
-        addConventionSync(ordNumber, date, totalMontant, items)
+        addConventionSync(ordNumber, date, totalMontant, items, tvaRate)
     }
 
     fun addConventionSync(
         ordNumber: Long,
         date: String,
         totalMontant: Double,
-        items: List<ConventionDraftArticle>
+        items: List<ConventionDraftArticle>,
+        tvaRate: Double = 0.0
     ) {
         val currentSupplier = _uiState.value.selectedSupplier ?: return
         database.transaction {
@@ -383,7 +415,8 @@ class SuppliersViewModel(
                 ord_number = ordNumber,
                 date = date,
                 global_unit_price = 0.0,
-                total_montant = totalMontant
+                total_montant = totalMontant,
+                tva_rate = tvaRate
             )
             val convId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
             items.forEach { item ->

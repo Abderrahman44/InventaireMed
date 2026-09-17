@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,6 +31,15 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -121,7 +132,12 @@ fun ConventionDetailScreen(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("📜", fontSize = 18.sp)
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
 
                         Column {
@@ -142,9 +158,14 @@ fun ConventionDetailScreen(
                                     containerColor = AppTheme.colors.statusSuccessContainer,
                                     contentColor = AppTheme.colors.onStatusSuccess
                                 )
+                                AppBadge(
+                                    text = if (convention.tvaRate > 0) "TVA ${convention.tvaRate}%" else "TVA 0% (Exonéré)",
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
                             }
                             Text(
-                                text = "Fournisseur : ${supplier.fullName} (FRN-${supplier.id.toString().padStart(4, '0')}) • Signée le : ${convention.date} • Plafond : ${convention.totalMontant.toLong()} DZD",
+                                text = "Fournisseur : ${supplier.fullName} (FRN-${supplier.id.toString().padStart(4, '0')}) • Signée le : ${convention.date} • Plafond : ${convention.totalMontant.toLong()} DZD • TVA : ${convention.tvaRate}%",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.colors.textSecondary
                             )
@@ -173,14 +194,14 @@ fun ConventionDetailScreen(
                 title = "Articles Conventionnés",
                 value = "${balances.size}",
                 subtitle = "Lignes contractuelles actives",
-                iconLabel = "📦",
+                icon = Icons.Default.Inventory2,
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
                 title = "Volume Global Convenu",
                 value = "${totalAgreed.toLong()} U",
                 subtitle = "Quota total négocié",
-                iconLabel = "📊",
+                icon = Icons.Default.BarChart,
                 accentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
@@ -188,7 +209,7 @@ fun ConventionDetailScreen(
                 title = "Volume Consommé",
                 value = "${totalOrdered.toLong()} U",
                 subtitle = "Engagé via bons de commande",
-                iconLabel = "🛒",
+                icon = Icons.Default.ShoppingCart,
                 accentColor = AppTheme.colors.statusWarning,
                 modifier = Modifier.weight(1f)
             )
@@ -196,7 +217,7 @@ fun ConventionDetailScreen(
                 title = "Solde Restant",
                 value = "${totalRemaining.toLong()} U",
                 subtitle = "Quota disponible pour commandes",
-                iconLabel = "⚡",
+                icon = Icons.Default.Bolt,
                 accentColor = if (totalRemaining <= 0) AppTheme.colors.statusUrgent else AppTheme.colors.statusSuccess,
                 modifier = Modifier.weight(1f)
             )
@@ -276,7 +297,7 @@ fun ConventionDetailScreen(
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(filteredBalances, key = { it.conventionItemId }) { item ->
+                        items(filteredBalances, key = { it.conventionItemId }, contentType = { "convention_detail_row" }) { item ->
                             val progress = if (item.agreedQuantity > 0) {
                                 (item.orderedQuantity / item.agreedQuantity).toFloat().coerceIn(0f, 1f)
                             } else 0f
@@ -362,7 +383,13 @@ fun ConventionDetailScreen(
                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
-                                        Text("✏️ Éditer", style = MaterialTheme.typography.labelSmall)
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Éditer", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
@@ -415,7 +442,8 @@ fun AddArticleToConventionDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
@@ -513,7 +541,12 @@ fun SensitiveEditWarningDialog(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("⚠️", fontSize = 22.sp)
+                Icon(
+                    imageVector = Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = AppTheme.colors.statusUrgent
+                )
                 Text(
                     text = "Action Sensible : Modification d'Article",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -525,7 +558,8 @@ fun SensitiveEditWarningDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 4.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
@@ -636,7 +670,8 @@ fun EditConventionArticleDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 6.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
@@ -700,14 +735,22 @@ fun EditConventionArticleDialog(
                 )
 
                 if (isBelowOrdered) {
-                    Box(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(AppTheme.colors.statusUrgentContainer, RoundedCornerShape(6.dp))
-                            .padding(8.dp)
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = AppTheme.colors.onStatusUrgent
+                        )
                         Text(
-                            text = "⚠️ Attention : Le nouveau quota (${newQuantity.toLong()}) est inférieur à la quantité déjà commandée (${article.orderedQuantity.toLong()}) !",
+                            text = "Attention : Le nouveau quota (${newQuantity.toLong()}) est inférieur à la quantité déjà commandée (${article.orderedQuantity.toLong()}) !",
                             style = MaterialTheme.typography.labelSmall,
                             color = AppTheme.colors.onStatusUrgent
                         )

@@ -17,19 +17,35 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import org.abdat.inventory.ui.components.AppDatePickerField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -168,7 +184,12 @@ fun SuppliersScreen(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("🏢", fontSize = 20.sp)
+                        Icon(
+                            imageVector = Icons.Default.Business,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
 
                     Column {
@@ -261,31 +282,43 @@ fun SuppliersScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    if (state.filteredSuppliers.isEmpty()) {
+                    if (state.isLoading) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (state.filteredSuppliers.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(24.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                "Aucun fournisseur trouvé.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AppTheme.colors.textSecondary
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "Aucun fournisseur trouvé",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.colors.textSecondary
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                TextButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                                    Text("Réinitialiser les filtres")
+                                }
+                            }
                         }
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(state.filteredSuppliers, key = { it.id }) { supplier ->
+                            items(state.filteredSuppliers, key = { it.id }, contentType = { "supplier_card" }) { supplier ->
                                 val isSelected = supplier.id == state.selectedSupplier?.id
-                                SupplierCardItem(
-                                    supplier = supplier,
-                                    isSelected = isSelected,
-                                    onClick = { viewModel.selectSupplier(supplier) }
-                                )
+                                Box(modifier = Modifier.animateItem()) {
+                                    SupplierCardItem(
+                                        supplier = supplier,
+                                        isSelected = isSelected,
+                                        onClick = { viewModel.selectSupplier(supplier) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -367,7 +400,13 @@ fun SuppliersScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                 ) {
-                                    Text("👤 Fiche / Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                                    Icon(
+                                        imageVector = Icons.Default.Badge,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Fiche / Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
                                 }
                             }
                         }
@@ -422,8 +461,8 @@ fun SuppliersScreen(
         AddConventionDialog(
             supplierName = state.selectedSupplier?.fullName ?: "",
             onDismiss = { viewModel.closeAddConventionDialog() },
-            onConfirm = { ordNum, date, montant, items ->
-                viewModel.addConvention(ordNum, date, montant, items)
+            onConfirm = { ordNum, date, montant, items, tvaRate ->
+                viewModel.addConvention(ordNum, date, montant, items, tvaRate)
             }
         )
     }
@@ -475,14 +514,14 @@ private fun SupplierCardItem(
             if (supplier.societe.isNotBlank()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "🏢 ${supplier.societe}",
+                    text = supplier.societe,
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     color = AppTheme.colors.textPrimary
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = if (supplier.ville.isNotBlank()) "📍 ${supplier.ville} • Réf: FRN-${supplier.id.toString().padStart(4, '0')}"
+                text = if (supplier.ville.isNotBlank()) "${supplier.ville} • Réf: FRN-${supplier.id.toString().padStart(4, '0')}"
                 else "Fournisseur Officiel • Réf: FRN-${supplier.id.toString().padStart(4, '0')}",
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTheme.colors.textSecondary
@@ -506,10 +545,11 @@ private fun ConventionsTabView(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(conventions, key = { it.id }) { conv ->
+            items(conventions, key = { it.id }, contentType = { "convention_card" }) { conv ->
                 val convBalances = balances[conv.id] ?: emptyList()
                 Card(
                     modifier = Modifier
+                        .animateItem()
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onSelectConvention(conv) },
@@ -530,7 +570,7 @@ private fun ConventionsTabView(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Plafond global: ${conv.totalMontant.toLong()} DZD • ${convBalances.size} article(s)",
+                                    text = "Plafond global: ${conv.totalMontant.toLong()} DZD • ${convBalances.size} article(s) • TVA: ${if (conv.tvaRate > 0) "${conv.tvaRate}%" else "0% (Exonéré)"}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
@@ -539,6 +579,13 @@ private fun ConventionsTabView(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                if (conv.tvaRate > 0) {
+                                    AppBadge(
+                                        text = "TVA ${conv.tvaRate}%",
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
                                 AppBadge(
                                     text = "ACTIVE",
                                     containerColor = AppTheme.colors.statusSuccessContainer,
@@ -620,16 +667,18 @@ private fun ReferencedArticlesTabView(
             Text("Aucun article conventionné enregistré.", color = AppTheme.colors.textSecondary)
         }
     } else {
+        val tableScrollState = rememberScrollState()
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(tableScrollState)
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("DÉSIGNATION", modifier = Modifier.weight(2f), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("DÉSIGNATION", modifier = Modifier.width(180.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("UNITÉ", modifier = Modifier.width(90.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("PRIX NÉGOCIÉ", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("QUOTA CONVENU", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
@@ -637,14 +686,15 @@ private fun ReferencedArticlesTabView(
                     Text("SOLDE RESTANT", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                 }
             }
-            items(allItems, key = { it.conventionItemId }) { item ->
+            items(allItems, key = { it.conventionItemId }, contentType = { "convention_article_row" }) { item ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(tableScrollState)
                         .padding(horizontal = 12.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(item.designation, modifier = Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = AppTheme.colors.textPrimary)
+                    Text(item.designation, modifier = Modifier.width(180.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = AppTheme.colors.textPrimary)
                     Text(item.unite, modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text("${item.unitPrice.toLong()} DZD", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text("${item.agreedQuantity.toLong()}", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = AppTheme.colors.textPrimary)
@@ -669,31 +719,38 @@ private fun HistoryTabView(historyItems: List<SupplierHistoryItem>) {
             Text("Aucun mouvement (BC ou BL) répertorié pour ce fournisseur.", color = AppTheme.colors.textSecondary)
         }
     } else {
+        val tableScrollState = rememberScrollState()
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(tableScrollState)
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("RÉFÉRENCE", modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
-                    Text("TYPE", modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("RÉFÉRENCE", modifier = Modifier.width(180.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                    Text("TYPE", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("DATE", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("MONTANT (DZD)", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                     Text("STATUT", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                 }
             }
-            items(historyItems) { item ->
+            itemsIndexed(
+                items = historyItems,
+                key = { index, item -> item.id.ifEmpty { "${item.type}_${item.reference}_${item.date}_$index" } },
+                contentType = { _, _ -> "history_row" }
+            ) { _, item ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(tableScrollState)
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(item.reference, modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
-                    Text(item.type, modifier = Modifier.weight(1.5f), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                    Text(item.reference, modifier = Modifier.width(180.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
+                    Text(item.type, modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(item.date, modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text("${item.amountDzd.toLong()} DZD", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textPrimary)
                     Box(modifier = Modifier.width(110.dp)) {
@@ -789,7 +846,9 @@ private fun AddSupplierDialog(
         title = { Text("Ajouter un Nouveau Fournisseur", fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
@@ -848,11 +907,12 @@ private fun AddSupplierDialog(
 private fun AddConventionDialog(
     supplierName: String,
     onDismiss: () -> Unit,
-    onConfirm: (Long, String, Double, List<ConventionDraftArticle>) -> Unit
+    onConfirm: (Long, String, Double, List<ConventionDraftArticle>, Double) -> Unit
 ) {
     var ordNumberText by remember { mutableStateOf("1") }
     var date by remember { mutableStateOf("2026-09-08") }
     var montantText by remember { mutableStateOf("5000000") }
+    var tvaRateText by remember { mutableStateOf("0") }
 
     val draftArticles = remember { mutableStateListOf<ConventionDraftArticle>() }
 
@@ -865,7 +925,9 @@ private fun AddConventionDialog(
         title = { Text("Nouvelle Convention (Multi-Articles) - $supplierName", fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier
+                    .padding(vertical = 8.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
@@ -879,11 +941,10 @@ private fun AddConventionDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
+                    AppDatePickerField(
                         value = date,
                         onValueChange = { date = it },
-                        label = { Text("Date (AAAA-MM-JJ)") },
-                        singleLine = true,
+                        label = "Date Convention",
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
@@ -891,7 +952,38 @@ private fun AddConventionDialog(
                         onValueChange = { montantText = it },
                         label = { Text("Plafond Global (DZD)") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
                         modifier = Modifier.weight(1.5f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Taux TVA :",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = AppTheme.colors.textPrimary
+                    )
+                    listOf(0.0, 9.0, 19.0).forEach { rate ->
+                        val isSelected = (tvaRateText.toDoubleOrNull() ?: -1.0) == rate
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                tvaRateText = if (rate % 1.0 == 0.0) rate.toInt().toString() else rate.toString()
+                            },
+                            label = { Text("${rate.toInt()}%") }
+                        )
+                    }
+                    OutlinedTextField(
+                        value = tvaRateText,
+                        onValueChange = { tvaRateText = it },
+                        label = { Text("TVA %") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Next),
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
@@ -907,7 +999,7 @@ private fun AddConventionDialog(
                         color = MaterialTheme.colorScheme.surfaceContainerLow
                     ) {
                         LazyColumn(modifier = Modifier.padding(6.dp)) {
-                            items(draftArticles) { article ->
+                            items(draftArticles, key = { it.designation }, contentType = { "draft_article" }) { article ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -917,12 +1009,17 @@ private fun AddConventionDialog(
                                         "${article.designation} (${article.quantity.toLong()} ${article.unite})",
                                         style = MaterialTheme.typography.bodySmall
                                     )
-                                    Text(
-                                        "✕",
-                                        modifier = Modifier.clickable { draftArticles.remove(article) }.padding(4.dp),
-                                        fontSize = 11.sp,
-                                        color = AppTheme.colors.statusUrgent
-                                    )
+                                    IconButton(
+                                        onClick = { draftArticles.remove(article) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Retirer la ligne",
+                                            modifier = Modifier.size(14.dp),
+                                            tint = AppTheme.colors.statusUrgent
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -954,6 +1051,7 @@ private fun AddConventionDialog(
                         onValueChange = { itemQtyText = it },
                         label = { Text("Quota") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -985,7 +1083,8 @@ private fun AddConventionDialog(
                 onClick = {
                     val ord = ordNumberText.toLongOrNull() ?: 1L
                     val montant = montantText.toDoubleOrNull() ?: 0.0
-                    onConfirm(ord, date, montant, draftArticles.toList())
+                    val tvaRate = tvaRateText.toDoubleOrNull() ?: 0.0
+                    onConfirm(ord, date, montant, draftArticles.toList(), tvaRate)
                 }
             ) {
                 Text("Créer Convention")

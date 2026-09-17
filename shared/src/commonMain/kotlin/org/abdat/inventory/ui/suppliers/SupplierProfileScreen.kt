@@ -17,11 +17,25 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -132,7 +147,13 @@ fun SupplierProfileScreen(
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("✏️ Modifier Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Modifier Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
                 }
             }
         }
@@ -200,17 +221,28 @@ fun SupplierProfileScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    Text(
-                        text = if (supplier.societe.isNotBlank()) {
-                            "🏢 Société: ${supplier.societe}"
-                        } else {
-                            "🏢 Société non renseignée"
-                        },
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = if (supplier.societe.isNotBlank()) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Business,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (supplier.societe.isNotBlank()) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
+                        )
+                        Text(
+                            text = if (supplier.societe.isNotBlank()) {
+                                "Société: ${supplier.societe}"
+                            } else {
+                                "Société non renseignée"
+                            },
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = if (supplier.societe.isNotBlank()) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(6.dp))
 
@@ -218,21 +250,43 @@ fun SupplierProfileScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = "📍 Localisation: ${supplier.ville.ifBlank { "Non renseignée" }}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Place,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                text = "Localisation: ${supplier.ville.ifBlank { "Non renseignée" }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                        }
                         Text(
                             text = "•",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.colors.textSecondary
                         )
-                        Text(
-                            text = "📁 Réf: FRN-${supplier.id.toString().padStart(4, '0')}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                text = "Réf: FRN-${supplier.id.toString().padStart(4, '0')}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -259,7 +313,7 @@ fun SupplierProfileScreen(
         ) {
             ContactInfoCard(
                 modifier = Modifier.weight(1f),
-                icon = "📞",
+                icon = Icons.Default.Phone,
                 title = "Téléphone Société / Fixe",
                 value = supplier.phone.ifBlank { "Non renseigné" },
                 subtitle = "Ligne principale ou standard commercial",
@@ -268,7 +322,7 @@ fun SupplierProfileScreen(
 
             ContactInfoCard(
                 modifier = Modifier.weight(1f),
-                icon = "👤",
+                icon = Icons.Default.Person,
                 title = "Responsable Commercial",
                 value = supplier.responsablePhone.ifBlank { "Non renseigné" },
                 subtitle = "Ligne directe mobile du contact attitré",
@@ -284,7 +338,7 @@ fun SupplierProfileScreen(
         ) {
             ContactInfoCard(
                 modifier = Modifier.weight(1f),
-                icon = "✉️",
+                icon = Icons.Default.Email,
                 title = "Courrier Électronique (Email)",
                 value = supplier.email.ifBlank { "Non renseigné" },
                 subtitle = "Pour envois des bons de commande & factures",
@@ -293,7 +347,7 @@ fun SupplierProfileScreen(
 
             ContactInfoCard(
                 modifier = Modifier.weight(1f),
-                icon = "💬",
+                icon = Icons.Default.Chat,
                 title = "Canaux Rapides (WhatsApp / Telegram)",
                 value = supplier.otherLinks.ifBlank { "Aucun lien enregistré" },
                 subtitle = "Messagerie instantanée & liens utiles",
@@ -323,7 +377,7 @@ fun SupplierProfileScreen(
                 title = "Conventions Cadres",
                 value = "${conventions.size}",
                 subtitle = "Actives & Archivées",
-                iconLabel = "📜",
+                icon = Icons.Default.Description,
                 modifier = Modifier.weight(1f)
             )
 
@@ -331,7 +385,7 @@ fun SupplierProfileScreen(
                 title = "Plafond Contractuel",
                 value = "${totalCeilingDzd.toLong()} DZD",
                 subtitle = "Cumul global",
-                iconLabel = "💰",
+                icon = Icons.Default.Payments,
                 accentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
@@ -340,7 +394,7 @@ fun SupplierProfileScreen(
                 title = "Bons & Livraisons",
                 value = "${historyItems.size}",
                 subtitle = "Opérations BC / BL",
-                iconLabel = "📦",
+                icon = Icons.Default.Inventory2,
                 modifier = Modifier.weight(1f)
             )
 
@@ -348,7 +402,7 @@ fun SupplierProfileScreen(
                 title = "Ville / Antenne",
                 value = supplier.ville.ifBlank { "N/A" },
                 subtitle = "Bassin logistique",
-                iconLabel = "📍",
+                icon = Icons.Default.Place,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -369,7 +423,12 @@ fun SupplierProfileScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text("ℹ️", fontSize = 24.sp)
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
                 Column {
                     Text(
                         text = "Synchronisation des coordonnées fournisseur",
@@ -398,7 +457,7 @@ fun SupplierProfileScreen(
 
 @Composable
 private fun ContactInfoCard(
-    icon: String,
+    icon: ImageVector,
     title: String,
     value: String,
     subtitle: String,
@@ -432,7 +491,12 @@ private fun ContactInfoCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(icon, fontSize = 16.sp)
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                     Text(
                         text = title,
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),

@@ -22,6 +22,7 @@ data class Convention(
     val date: String,
     val globalUnitPrice: Double = 0.0,
     val totalMontant: Double = 0.0,
+    val tvaRate: Double = 0.0,
     val items: List<ConventionItem> = emptyList()
 )
 

@@ -28,3 +28,15 @@ compose.desktop {
         }
     }
 }
+
+tasks.register<JavaExec>("seedDb") {
+    group = "application"
+    description = "Seeds the target SQLite database with mock data."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("org.abdat.inventory.MainKt")
+    val dbPath = project.findProperty("dbPath") as? String
+        ?: project.findProperty("seedDbPath") as? String
+        ?: ""
+    args = if (dbPath.isNotBlank()) listOf("--seed", dbPath) else listOf("--seed")
+}
+
