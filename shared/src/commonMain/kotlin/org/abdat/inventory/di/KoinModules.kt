@@ -1,6 +1,8 @@
 package org.abdat.inventory.di
 
+import app.cash.sqldelight.db.SqlDriver
 import org.abdat.inventory.database.AppDatabase
+import org.abdat.inventory.database.DatabaseBackupService
 import org.abdat.inventory.database.DatabaseDriverFactory
 import org.abdat.inventory.database.createDatabase
 import org.abdat.inventory.database.ensureCategoryTaxonomy
@@ -21,9 +23,12 @@ import org.koin.core.context.startKoin
 import org.koin.dsl.module
 
 val databaseModule = module {
+    single<SqlDriver> {
+        get<DatabaseDriverFactory>().createDriver()
+    }
     single<AppDatabase> {
-        val driverFactory = get<DatabaseDriverFactory>()
-        val db = createDatabase(driverFactory)
+        val driver = get<SqlDriver>()
+        val db = AppDatabase(driver)
         // Baseline taxonomy and legacy-label reconciliation runs on every startup.
         ensureCategoryTaxonomy(db)
         db
@@ -42,9 +47,9 @@ val viewModelModule = module {
     single { DeliveriesViewModel(get()) }
     single { SortiesViewModel(get(), get()) }
     single { ServicesViewModel(get()) }
-    single { DechargeViewModel(get()) }
+    single { DechargeViewModel(get(), get()) }
     single { PersonnelViewModel(get()) }
-    single { DynamicConfigViewModel(get(), get()) }
+    single { DynamicConfigViewModel(get(), get(), getOrNull<DatabaseBackupService>()) }
     single { ArticleDetailViewModel(get(), get()) }
 }
 

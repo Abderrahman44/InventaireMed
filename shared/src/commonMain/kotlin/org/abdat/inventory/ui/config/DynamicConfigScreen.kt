@@ -25,13 +25,18 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -197,10 +202,85 @@ fun DynamicConfigScreen(
             ConfigTab.THRESHOLDS -> ConfigThresholdsTab(viewModel = viewModel, state = state)
             ConfigTab.PREFIXES -> ConfigPrefixesTab(viewModel = viewModel, state = state)
             ConfigTab.PROFILE -> ConfigProfileTab(viewModel = viewModel, state = state)
+            ConfigTab.BACKUP -> ConfigBackupTab(viewModel = viewModel, state = state)
         }
     }
 
     // Dialogs
+    if (state.isRestoreConfirmationDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelRestore() },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = strings.confirmRestoreTitle,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = strings.confirmRestoreMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.colors.textSecondary
+                    )
+                    state.pendingRestoreFilePath?.let { path ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Fichier sélectionné :",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = AppTheme.colors.textSecondary
+                                )
+                                Text(
+                                    text = path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.colors.textPrimary
+                                )
+                                state.pendingRestoreValidationDetails?.let { details ->
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = details,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AppTheme.colors.statusSuccess
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmRestore() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Restaurer maintenant")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { viewModel.cancelRestore() }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
+
     if (state.isAddOptionDialogOpen) {
         AddConfigOptionDialog(
             category = state.targetCategoryForAdd,
@@ -247,6 +327,42 @@ fun DynamicConfigScreen(
             onDismiss = { viewModel.closeEditProfileDialog() },
             onConfirm = { fullName, phone, email, role ->
                 viewModel.saveUserProfile(fullName, phone, email, role)
+            }
+        )
+    }
+
+    if (state.isRestoreConfirmationDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelRestore() },
+            title = { Text("Confirmer la restauration") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Êtes-vous sûr de vouloir restaurer cette sauvegarde ?")
+                    state.pendingRestoreFilePath?.let {
+                        Text("Fichier : $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    state.pendingRestoreValidationDetails?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Text(
+                        "Attention : Les données actuelles seront remplacées par celles de la sauvegarde.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmRestore() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Restaurer")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { viewModel.cancelRestore() }) {
+                    Text("Annuler")
+                }
             }
         )
     }
@@ -892,3 +1008,299 @@ private fun EditProfileDialog(
         }
     )
 }
+
+@Composable
+private fun ConfigBackupTab(
+    viewModel: DynamicConfigViewModel,
+    state: DynamicConfigUiState
+) {
+    val strings = AppTheme.strings
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Top Banner / Overview Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = AppTheme.colors.surfaceWhite),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Storage,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = strings.backupTitle,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AppTheme.colors.textPrimary
+                        )
+                        Text(
+                            text = strings.backupSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.colors.textSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    // Last Backup
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = strings.lastBackup,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                text = state.lastBackupDate ?: strings.never,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (state.lastBackupDate != null) AppTheme.colors.statusSuccess else AppTheme.colors.textSecondary
+                            )
+                            state.lastBackupPath?.let { path ->
+                                Text(
+                                    text = path,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTheme.colors.textSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    // Last Restore
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                text = strings.lastRestore,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Text(
+                                text = state.lastRestoreDate ?: strings.never,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = AppTheme.colors.textPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Action Cards
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Card 1: Export Backup
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.colors.surfaceWhite),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileDownload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = strings.exportBackup,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AppTheme.colors.textPrimary
+                        )
+                    }
+
+                    Text(
+                        text = strings.exportBackupDesc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.colors.textSecondary
+                    )
+
+                    Surface(
+                        color = AppTheme.colors.backgroundSlate.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Contenu de la sauvegarde complète :",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = AppTheme.colors.textPrimary
+                            )
+                            Text("• Stock, articles, seuils d'alerte et valorisation", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                            Text("• Fournisseurs, conventions-cadres et quotas", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                            Text("• Bons de commande, réceptions et sorties", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                            Text("• Dons, décharges, départements et personnel", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                            Text("• Préfixes, listes déroulantes et profil utilisateur", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Button(
+                        onClick = { viewModel.exportBackup() },
+                        enabled = !state.isBackupOperationInProgress,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exporter vers un fichier...")
+                    }
+                }
+            }
+
+            // Card 2: Restore Backup
+            Card(
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.colors.surfaceWhite),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileUpload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = strings.restoreBackup,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AppTheme.colors.textPrimary
+                        )
+                    }
+
+                    Text(
+                        text = strings.restoreBackupDesc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.colors.textSecondary
+                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "La restauration écrase les données actuelles avec celles de la sauvegarde. Une copie locale 'inventory.db.pre_restore_bak' est automatiquement préservée par sécurité.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    OutlinedButton(
+                        onClick = { viewModel.requestImportBackup() },
+                        enabled = !state.isBackupOperationInProgress,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Choisir un fichier à restaurer...")
+                    }
+                }
+            }
+        }
+    }
+}
+

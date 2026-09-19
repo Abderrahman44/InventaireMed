@@ -11,9 +11,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.abdat.inventory.data.mapper.toDomain
 import org.abdat.inventory.data.repository.CategoryRepository
 import org.abdat.inventory.database.AppDatabase
+import org.abdat.inventory.database.BackupValidationResult
+import org.abdat.inventory.database.DatabaseBackupService
 import org.abdat.inventory.domain.model.CATEGORY_FAMILY
 import org.abdat.inventory.domain.model.CATEGORY_SOUS_FAMILY
 import org.abdat.inventory.domain.model.CategoryCodes
@@ -21,12 +26,16 @@ import org.abdat.inventory.domain.model.CategoryTaxonomy
 import org.abdat.inventory.domain.model.DynamicConfigItem
 import org.abdat.inventory.domain.model.UserProfile
 import org.abdat.inventory.domain.model.categoryLabelsMatch
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.showOpenFileDialog
+import org.abdat.inventory.util.showSaveFileDialog
 
 enum class ConfigTab(val label: String) {
     TYPES("Listes & Unités"),
     THRESHOLDS("Seuils d'Alerte"),
     PREFIXES("Numérotation & Préfixes"),
-    PROFILE("Profil Utilisateur")
+    PROFILE("Profil Utilisateur"),
+    BACKUP("Sauvegarde & Données")
 }
 
 @Stable
@@ -41,6 +50,15 @@ data class DynamicConfigUiState(
     val prefixSortie: String = "BS-2026-",
     val prefixDecharge: String = "DCH-2026-",
     val userProfile: UserProfile = UserProfile(),
+
+    // Backup & Restore
+    val lastBackupDate: String? = null,
+    val lastBackupPath: String? = null,
+    val lastRestoreDate: String? = null,
+    val isRestoreConfirmationDialogOpen: Boolean = false,
+    val pendingRestoreFilePath: String? = null,
+    val pendingRestoreValidationDetails: String? = null,
+    val isBackupOperationInProgress: Boolean = false,
 
     // Dialog States
     val isAddOptionDialogOpen: Boolean = false,
@@ -57,7 +75,8 @@ data class DynamicConfigUiState(
 
 class DynamicConfigViewModel(
     private val database: AppDatabase,
-    private val categoryRepository: CategoryRepository
+    private val categoryRepository: CategoryRepository,
+    private val backupService: DatabaseBackupService? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DynamicConfigUiState())
@@ -106,6 +125,10 @@ class DynamicConfigViewModel(
         val dbProfile = database.appDatabaseQueries.getUserProfile().executeAsOneOrNull()
         val profile = dbProfile?.toDomain() ?: UserProfile()
 
+        val lastBackupDate = database.appDatabaseQueries.getMetadata("last_backup_date").executeAsOneOrNull()
+        val lastBackupPath = database.appDatabaseQueries.getMetadata("last_backup_path").executeAsOneOrNull()
+        val lastRestoreDate = database.appDatabaseQueries.getMetadata("last_restore_date").executeAsOneOrNull()
+
         _uiState.update { current ->
             current.copy(
                 units = units.toImmutableList(),
@@ -117,6 +140,9 @@ class DynamicConfigViewModel(
                 prefixSortie = pfxSortie,
                 prefixDecharge = pfxDecharge,
                 userProfile = profile,
+                lastBackupDate = lastBackupDate,
+                lastBackupPath = lastBackupPath,
+                lastRestoreDate = lastRestoreDate,
                 isLoading = false
             )
         }
@@ -418,5 +444,151 @@ class DynamicConfigViewModel(
 
     fun dismissMessages() {
         _uiState.update { it.copy(actionSuccessMessage = null, actionErrorMessage = null) }
+    }
+
+    // ------------------------------------------------------------------------
+    // Backup & Restore Operations
+    // ------------------------------------------------------------------------
+
+    fun exportBackup() {
+        viewModelScope.launch {
+            exportBackupSync()
+        }
+    }
+
+    suspend fun exportBackupSync(): Boolean {
+        if (backupService == null) {
+            _uiState.update { it.copy(actionErrorMessage = "Le service de sauvegarde n'est pas disponible.") }
+            return false
+        }
+
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val datePart = "${now.year}-${now.monthNumber.toString().padStart(2, '0')}-${now.dayOfMonth.toString().padStart(2, '0')}"
+        val defaultName = "inventairemed_backup_$datePart.db"
+
+        val targetPath = showSaveFileDialog(
+            title = "Exporter une sauvegarde de la base de données",
+            defaultFileName = defaultName,
+            filters = FileTypeFilter.BACKUP_FILTERS
+        ) ?: return false
+
+        _uiState.update {
+            it.copy(isBackupOperationInProgress = true, actionErrorMessage = null, actionSuccessMessage = null)
+        }
+
+        val result = backupService.exportBackup(targetPath)
+        return result.fold(
+            onSuccess = { exportResult ->
+                loadDataSync()
+                val sizeKb = (exportResult.fileSizeInBytes / 1024).coerceAtLeast(1)
+                _uiState.update {
+                    it.copy(
+                        isBackupOperationInProgress = false,
+                        actionSuccessMessage = "Sauvegarde exportée avec succès ($sizeKb Ko).",
+                        actionErrorMessage = null
+                    )
+                }
+                true
+            },
+            onFailure = { error ->
+                _uiState.update {
+                    it.copy(
+                        isBackupOperationInProgress = false,
+                        actionErrorMessage = "Échec de l'exportation : ${error.message}",
+                        actionSuccessMessage = null
+                    )
+                }
+                false
+            }
+        )
+    }
+
+    fun requestImportBackup() {
+        viewModelScope.launch {
+            requestImportBackupSync()
+        }
+    }
+
+    suspend fun requestImportBackupSync() {
+        if (backupService == null) {
+            _uiState.update { it.copy(actionErrorMessage = "Le service de sauvegarde n'est pas disponible.") }
+            return
+        }
+
+        val selectedPath = showOpenFileDialog(
+            title = "Sélectionner un fichier de sauvegarde à restaurer",
+            filters = FileTypeFilter.BACKUP_FILTERS
+        ) ?: return
+
+        val validation = backupService.validateBackupFile(selectedPath)
+        when (validation) {
+            is BackupValidationResult.Valid -> {
+                _uiState.update {
+                    it.copy(
+                        isRestoreConfirmationDialogOpen = true,
+                        pendingRestoreFilePath = selectedPath,
+                        pendingRestoreValidationDetails = validation.details,
+                        actionErrorMessage = null
+                    )
+                }
+            }
+            is BackupValidationResult.Invalid -> {
+                _uiState.update {
+                    it.copy(
+                        actionErrorMessage = "Fichier de sauvegarde invalide : ${validation.reason}",
+                        actionSuccessMessage = null
+                    )
+                }
+            }
+        }
+    }
+
+    fun confirmRestore() {
+        viewModelScope.launch {
+            val path = _uiState.value.pendingRestoreFilePath ?: return@launch
+            _uiState.update {
+                it.copy(
+                    isRestoreConfirmationDialogOpen = false,
+                    isBackupOperationInProgress = true,
+                    actionErrorMessage = null,
+                    actionSuccessMessage = null
+                )
+            }
+
+            val result = backupService?.restoreBackup(path)
+            if (result != null && result.isSuccess) {
+                loadDataSync()
+                _uiState.update {
+                    it.copy(
+                        isBackupOperationInProgress = false,
+                        pendingRestoreFilePath = null,
+                        pendingRestoreValidationDetails = null,
+                        actionSuccessMessage = "Base de données restaurée avec succès.",
+                        actionErrorMessage = null
+                    )
+                }
+            } else {
+                val errorMsg = result?.exceptionOrNull()?.message ?: "Erreur inconnue lors de la restauration."
+                _uiState.update {
+                    it.copy(
+                        isBackupOperationInProgress = false,
+                        pendingRestoreFilePath = null,
+                        pendingRestoreValidationDetails = null,
+                        actionErrorMessage = "Échec de la restauration : $errorMsg",
+                        actionSuccessMessage = null
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelRestore() {
+        _uiState.update {
+            it.copy(
+                isRestoreConfirmationDialogOpen = false,
+                pendingRestoreFilePath = null,
+                pendingRestoreValidationDetails = null
+            )
+        }
     }
 }

@@ -72,6 +72,21 @@ class JvmDatabaseDriverFactory(
                 }
             }
 
+            val sortieColumns = listOf(
+                "demandeur TEXT NOT NULL DEFAULT ''",
+                "recepteur_interne TEXT NOT NULL DEFAULT ''",
+                "motif TEXT NOT NULL DEFAULT ''",
+                "chef_service TEXT NOT NULL DEFAULT ''",
+                "beneficiaire_ids TEXT NOT NULL DEFAULT ''"
+            )
+            for (col in sortieColumns) {
+                try {
+                    driver.execute(null, "ALTER TABLE bon_de_sortie ADD COLUMN $col", 0)
+                } catch (_: Exception) {
+                    // Column already exists or migration already applied
+                }
+            }
+
             // Ensure newer tables exist if migrating an older database file
             val newTables = listOf(
                 """CREATE TABLE IF NOT EXISTS papier_decharge (
