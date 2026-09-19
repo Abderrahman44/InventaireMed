@@ -40,7 +40,7 @@ fun main(args: Array<String>) {
     application {
         Window(
             onCloseRequest = ::exitApplication,
-            title = "InventaireMed",
+            title = "EPH InventaireMed",
         ) {
             App()
         }
