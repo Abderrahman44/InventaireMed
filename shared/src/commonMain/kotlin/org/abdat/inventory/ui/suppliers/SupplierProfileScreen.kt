@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,11 +56,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import org.abdat.inventory.domain.model.Convention
 import org.abdat.inventory.domain.model.Fournisseur
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.PdfExporter
+import org.abdat.inventory.util.showSaveFileDialog
 
 @Composable
 fun SupplierProfileScreen(
@@ -81,6 +89,9 @@ fun SupplierProfileScreen(
 ) {
     val scrollState = rememberScrollState()
     val totalCeilingDzd = conventions.sumOf { it.totalMontant }
+    val coroutineScope = rememberCoroutineScope()
+    var exportSuccessMessage by remember { mutableStateOf<String?>(null) }
+    var exportErrorMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -142,18 +153,59 @@ fun SupplierProfileScreen(
                     }
                 }
 
-                Button(
-                    onClick = onOpenEdit,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Modifier Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                exportErrorMessage = null
+                                val path = showSaveFileDialog(
+                                    title = "Imprimer Dossier Fournisseur (PDF)",
+                                    defaultFileName = "dossier_fournisseur_${supplier.id}.pdf",
+                                    filters = listOf(FileTypeFilter("PDF Files", "pdf"))
+                                )
+                                if (path != null) {
+                                    try {
+                                        PdfExporter.generateSupplierDossierPdf(
+                                            filePath = path,
+                                            supplier = supplier,
+                                            conventions = conventions,
+                                            balancesMap = emptyMap()
+                                        )
+                                        exportSuccessMessage = "Le dossier fournisseur a été exporté en PDF avec succès.\n\nChemin : $path"
+                                    } catch (e: Exception) {
+                                        exportErrorMessage = "Erreur lors de l'export PDF : ${e.message ?: "Erreur inconnue"}"
+                                    }
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Print,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Imprimer Dossier (PDF)", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    Button(
+                        onClick = onOpenEdit,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Modifier Profil", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                    }
                 }
             }
         }
@@ -451,6 +503,63 @@ fun SupplierProfileScreen(
             supplier = supplier,
             onDismiss = onCloseEdit,
             onConfirm = onSaveProfile
+        )
+    }
+
+    // Export Success Notification Dialog
+    exportSuccessMessage?.let { msg ->
+        Dialog(onDismissRequest = { exportSuccessMessage = null }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = AppTheme.colors.surfaceWhite,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = AppTheme.colors.statusSuccess,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "Export Réussi",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AppTheme.colors.textPrimary
+                        )
+                    }
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTheme.colors.textSecondary
+                    )
+                    Button(
+                        onClick = { exportSuccessMessage = null },
+                        modifier = Modifier.align(Alignment.End),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("OK")
+                    }
+                }
+            }
+        }
+    }
+
+    // Export Error Notification Dialog
+    exportErrorMessage?.let { err ->
+        AlertDialog(
+            onDismissRequest = { exportErrorMessage = null },
+            title = { Text("Erreur d'export", fontWeight = FontWeight.Bold) },
+            text = { Text(err) },
+            confirmButton = {
+                Button(onClick = { exportErrorMessage = null }) { Text("OK") }
+            }
         )
     }
 }
