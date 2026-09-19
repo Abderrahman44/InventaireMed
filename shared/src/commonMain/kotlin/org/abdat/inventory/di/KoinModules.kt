@@ -9,6 +9,7 @@ import org.abdat.inventory.database.ensureCategoryTaxonomy
 import org.abdat.inventory.data.repository.CategoryRepository
 import org.abdat.inventory.data.repository.StockRepository
 import org.abdat.inventory.ui.config.DynamicConfigViewModel
+import org.abdat.inventory.ui.consumption.ConsumptionViewModel
 import org.abdat.inventory.ui.decharges.DechargeViewModel
 import org.abdat.inventory.ui.deliveries.DeliveriesViewModel
 import org.abdat.inventory.ui.inventory.ArticleDetailViewModel
@@ -51,6 +52,7 @@ val viewModelModule = module {
     single { PersonnelViewModel(get()) }
     single { DynamicConfigViewModel(get(), get(), getOrNull<DatabaseBackupService>()) }
     single { ArticleDetailViewModel(get(), get()) }
+    single { ConsumptionViewModel(get(), get(), get()) }
 }
 
 val appModule = module {

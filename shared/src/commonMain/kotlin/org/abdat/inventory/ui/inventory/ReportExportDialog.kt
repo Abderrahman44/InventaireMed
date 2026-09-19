@@ -2,9 +2,11 @@ package org.abdat.inventory.ui.inventory
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +22,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,12 +47,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.abdat.inventory.domain.model.StockArticle
+import org.abdat.inventory.domain.model.categoryLabelsMatch
 import org.abdat.inventory.theme.AppTheme
+import org.abdat.inventory.util.CsvExporter
 import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import java.io.File
 
 enum class ReportColumn(val id: String, val label: String, val isFinancial: Boolean) {
     CODE("code", "Code Article", false),
@@ -68,6 +73,7 @@ enum class ReportColumn(val id: String, val label: String, val isFinancial: Bool
 @Composable
 fun ReportExportDialog(
     articles: List<StockArticle>,
+    availableFamilies: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onExportSuccess: (String) -> Unit = {}
 ) {
@@ -80,24 +86,49 @@ fun ReportExportDialog(
         }
     }
 
-    var selectedFamilyFilter by remember { mutableStateOf("Tous") }
+    val allFamilies = remember(availableFamilies, articles) {
+        val configured = availableFamilies.map { it.trim() }.filter { it.isNotBlank() }
+        val fromArticles = articles.map { it.family.trim() }.filter { it.isNotBlank() }
+        val distinctFamilies = (configured + fromArticles).distinct()
+        val hasUnclassified = articles.any { it.family.isBlank() }
+        if (hasUnclassified) distinctFamilies + CATEGORY_FILTER_UNCLASSIFIED else distinctFamilies
+    }
+
+    val selectedFamilies = remember(allFamilies) {
+        mutableStateMapOf<String, Boolean>().apply {
+            allFamilies.forEach { put(it, true) }
+        }
+    }
+
     var selectedServiceFilter by remember { mutableStateOf("Tous") }
     var startDateFilter by remember { mutableStateOf("2026-01-01") }
     var endDateFilter by remember { mutableStateOf("2026-12-31") }
     var reportTitle by remember { mutableStateOf("État Général du Stock & Consommation") }
     var showPreviewSuccess by remember { mutableStateOf(false) }
     var exportSuccessPath by remember { mutableStateOf<String?>(null) }
+    var exportFormat by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     // Filter computation
     val filteredArticles = articles.filter { article ->
-        val matchesFam = selectedFamilyFilter == "Tous" || article.family.equals(selectedFamilyFilter, ignoreCase = true)
-        matchesFam
+        val fam = article.family.ifBlank { CATEGORY_FILTER_UNCLASSIFIED }
+        selectedFamilies.entries.any { (familyLabel, checked) ->
+            checked && categoryLabelsMatch(familyLabel, fam)
+        }
     }
 
     val selectedCount = selectedColumns.values.count { it }
+    val selectedFamiliesCount = selectedFamilies.values.count { it }
     val containsFinancial = selectedColumns.entries.any { (id, checked) ->
         checked && (id == ReportColumn.UNIT_PRICE.id || id == ReportColumn.TOTAL_VALUE.id)
+    }
+
+    val checkedFamilyNames = allFamilies.filter { selectedFamilies[it] == true }
+    val familySummaryText = when {
+        checkedFamilyNames.isEmpty() -> "Aucune"
+        checkedFamilyNames.size == allFamilies.size -> "Toutes (${allFamilies.size})"
+        else -> checkedFamilyNames.joinToString(", ")
     }
 
     AlertDialog(
@@ -135,20 +166,11 @@ fun ReportExportDialog(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = selectedFamilyFilter,
-                        onValueChange = { selectedFamilyFilter = it },
-                        label = { Text("Filtrer par Famille (ex: Médicaments, Tous)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
                         value = selectedServiceFilter,
                         onValueChange = { selectedServiceFilter = it },
                         label = { Text("Service Destinataire (ex: Bloc, Tous)") },
                         modifier = Modifier.weight(1f)
                     )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = startDateFilter,
                         onValueChange = { startDateFilter = it },
@@ -161,6 +183,90 @@ fun ReportExportDialog(
                         label = { Text("Date Fin (YYYY-MM-DD)") },
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                // Family Filter Checkbox Section
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Familles de Produits à Inclure",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Cochez les familles ($selectedFamiliesCount / ${allFamilies.size} sélectionnée(s))",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AppTheme.colors.textSecondary
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { allFamilies.forEach { selectedFamilies[it] = true } },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("Tout sélectionner", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { allFamilies.forEach { selectedFamilies[it] = false } },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("Tout désélectionner", fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                if (allFamilies.isEmpty()) {
+                    Text(
+                        text = "Aucune famille configurée",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.colors.textSecondary
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            allFamilies.chunked(2).forEach { rowFams ->
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    rowFams.forEach { fam ->
+                                        Row(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable {
+                                                    val current = selectedFamilies[fam] ?: true
+                                                    selectedFamilies[fam] = !current
+                                                },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Checkbox(
+                                                checked = selectedFamilies[fam] == true,
+                                                onCheckedChange = { isChecked ->
+                                                    selectedFamilies[fam] = isChecked
+                                                },
+                                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                                            )
+                                            Text(
+                                                text = fam,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = AppTheme.colors.textPrimary
+                                            )
+                                        }
+                                    }
+                                    if (rowFams.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -257,10 +363,28 @@ fun ReportExportDialog(
                         color = AppTheme.colors.textPrimary
                     )
                     Text(
-                        text = "Colonnes actives : $selectedCount / ${ReportColumn.entries.size}",
+                        text = "Familles : $selectedFamiliesCount / ${allFamilies.size} | Colonnes : $selectedCount / ${ReportColumn.entries.size}",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.primary
                     )
+                }
+
+                if (exportError != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(AppTheme.colors.statusUrgentContainer, RoundedCornerShape(8.dp))
+                            .padding(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = AppTheme.colors.onStatusUrgent)
+                            Text(
+                                text = exportError ?: "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AppTheme.colors.onStatusUrgent
+                            )
+                        }
+                    }
                 }
 
                 if (showPreviewSuccess) {
@@ -273,9 +397,10 @@ fun ReportExportDialog(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = AppTheme.colors.onStatusSuccess)
                             val message = if (exportSuccessPath != null) {
-                                "Rapport exporté avec succès !\nChemin : $exportSuccessPath"
+                                val fmt = exportFormat ?: "Fichier"
+                                "Rapport $fmt exporté avec succès !\nChemin : $exportSuccessPath"
                             } else {
-                                "Rapport prêt ! Impression simulée avec succès (${filteredArticles.size} articles, $selectedCount colonnes)."
+                                "Rapport prêt ! Impression simulée avec succès (${filteredArticles.size} articles, $selectedFamiliesCount familles, $selectedCount colonnes)."
                             }
                             Text(
                                 text = message,
@@ -292,6 +417,37 @@ fun ReportExportDialog(
                 OutlinedButton(
                     onClick = {
                         coroutineScope.launch {
+                            exportError = null
+                            val defaultName = reportTitle.replace(Regex("[^A-Za-z0-9]"), "_") + ".csv"
+                            val path = showSaveFileDialog(
+                                title = "Exporter Rapport CSV (Excel)",
+                                defaultFileName = defaultName,
+                                filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                            )
+                            if (path != null) {
+                                try {
+                                    val (headers, rows) = StockReportDataMapper.toHeadersAndRows(filteredArticles, selectedColumns)
+                                    CsvExporter.writeCsv(path, headers, rows)
+                                    exportFormat = "CSV"
+                                    exportSuccessPath = path
+                                    showPreviewSuccess = true
+                                    onExportSuccess("Rapport CSV exporté avec succès : $path")
+                                } catch (e: Exception) {
+                                    exportError = "Erreur lors de l'export CSV : ${e.message ?: "Erreur inconnue"}"
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Icon(imageVector = Icons.Default.Description, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Exporter CSV (Excel)")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            exportError = null
                             val defaultName = reportTitle.replace(Regex("[^A-Za-z0-9]"), "_") + ".pdf"
                             val path = showSaveFileDialog(
                                 title = "Exporter Rapport PDF",
@@ -300,21 +456,22 @@ fun ReportExportDialog(
                             )
                             if (path != null) {
                                 try {
-                                    val content = buildString {
-                                        appendLine("=== $reportTitle ===")
-                                        appendLine("Période: $startDateFilter à $endDateFilter")
-                                        appendLine("Famille: $selectedFamilyFilter | Service: $selectedServiceFilter")
-                                        appendLine("Articles inclus: ${filteredArticles.size}")
-                                        appendLine()
-                                        filteredArticles.forEach { a ->
-                                            appendLine("- ${a.designation} (Stock: ${a.quantity} ${a.uniteQuantite})")
-                                        }
-                                    }
-                                    File(path).writeText(content)
+                                    val (headers, rows) = StockReportDataMapper.toHeadersAndRows(filteredArticles, selectedColumns)
+                                    PdfExporter.generateStockReportPdf(
+                                        filePath = path,
+                                        reportTitle = reportTitle,
+                                        dateRange = "$startDateFilter à $endDateFilter",
+                                        familiesFilter = familySummaryText,
+                                        serviceFilter = selectedServiceFilter,
+                                        headers = headers,
+                                        rows = rows
+                                    )
+                                    exportFormat = "PDF"
                                     exportSuccessPath = path
                                     showPreviewSuccess = true
+                                    onExportSuccess("Rapport PDF exporté avec succès : $path")
                                 } catch (e: Exception) {
-                                    // Handle implicitly for now
+                                    exportError = "Erreur lors de la génération PDF : ${e.message ?: "Erreur inconnue"}"
                                 }
                             }
                         }

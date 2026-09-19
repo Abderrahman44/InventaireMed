@@ -487,6 +487,7 @@ fun InventoryScreen(
     if (isReportExportDialogOpen) {
         ReportExportDialog(
             articles = state.articles,
+            availableFamilies = state.taxonomy.families.map { it.label },
             onDismiss = { isReportExportDialogOpen = false }
         )
     }

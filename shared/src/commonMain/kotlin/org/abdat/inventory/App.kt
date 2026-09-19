@@ -14,6 +14,8 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.theme.ThemeMode
 import org.abdat.inventory.ui.config.DynamicConfigScreen
 import org.abdat.inventory.ui.config.DynamicConfigViewModel
+import org.abdat.inventory.ui.consumption.ConsumptionScreen
+import org.abdat.inventory.ui.consumption.ConsumptionViewModel
 import org.abdat.inventory.ui.decharges.DechargeScreen
 import org.abdat.inventory.ui.decharges.DechargeViewModel
 import org.abdat.inventory.ui.deliveries.DeliveriesScreen
@@ -48,6 +50,7 @@ fun App() {
     val dechargeViewModel: DechargeViewModel = koinInject()
     val personnelViewModel: PersonnelViewModel = koinInject()
     val dynamicConfigViewModel: DynamicConfigViewModel = koinInject()
+    val consumptionViewModel: ConsumptionViewModel = koinInject()
 
     val configState by dynamicConfigViewModel.uiState.collectAsState()
 
@@ -98,8 +101,7 @@ fun App() {
                         DynamicConfigScreen(viewModel = dynamicConfigViewModel)
                     }
                     AppScreenRoute.DASHBOARD -> {
-                        // Overview defaults to the Master Inventory hub
-                        InventoryScreen(viewModel = inventoryViewModel)
+                        ConsumptionScreen(viewModel = consumptionViewModel)
                     }
                 }
             }

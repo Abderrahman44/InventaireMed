@@ -12,6 +12,7 @@ koin = "4.0.2"
 sqldelight = "2.1.0"
 navigation-compose = "2.9.0-beta03"
 kotlin-csv = "1.10.0"
+openpdf = "2.0.3"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -46,6 +47,9 @@ navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-co
 
 # CSV
 kotlin-csv = { module = "com.github.doyaaaaaken:kotlin-csv-jvm", version.ref = "kotlin-csv" }
+
+# PDF
+openpdf = { module = "com.github.librepdf:openpdf", version.ref = "openpdf" }
 
 [plugins]
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }

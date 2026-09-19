@@ -63,7 +63,7 @@ enum class AppScreenRoute(val fallbackTitle: String, val icon: ImageVector, val 
     SERVICES("Services & Locaux", Icons.Default.Domain, "Structure organisationnelle"),
     PERSONNEL("Personnel", Icons.Default.Badge, "Répertoire des collaborateurs & chefs de service"),
     CONFIG("Paramètres & Config", Icons.Default.Settings, "Configuration dynamique & profil"),
-    DASHBOARD("Tableau de Bord", Icons.Default.Dashboard, "Aperçu général & indicateurs")
+    DASHBOARD("Consommation", Icons.Default.Dashboard, "Suivi de consommation & valorisation")
 }
 
 fun AppScreenRoute.localizedTitle(strings: AppStrings): String = when (this) {
