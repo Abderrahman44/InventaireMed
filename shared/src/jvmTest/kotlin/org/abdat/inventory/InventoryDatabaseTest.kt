@@ -242,7 +242,9 @@ class InventoryDatabaseTest {
             date = "2026-09-10",
             demandeur = "Dr. Benali",
             recepteur_interne = "Inf. Karim",
-            motif = "Urgence Chirurgicale"
+            motif = "Urgence Chirurgicale",
+            chef_service = "Dr. Benali",
+            beneficiaire_ids = ""
         )
         val bsId = queries.selectLastInsertedRowId().executeAsOne()
         queries.insertSortieItem(bsId, "SER-001", "Seringue 10ml", 40.0)
@@ -740,7 +742,9 @@ class InventoryDatabaseTest {
             date = "2026-09-17 16:30",
             demandeur = "Dr. Benslimane",
             recepteur_interne = "Infirmier Amine",
-            motif = "Besoin urgent bloc opératoire"
+            motif = "Besoin urgent bloc opératoire",
+            chef_service = "Dr. Benslimane",
+            beneficiaire_ids = ""
         )
         val sortieId = queries.selectLastInsertedRowId().executeAsOne()
 
@@ -771,6 +775,8 @@ class InventoryDatabaseTest {
             demandeur = "Dr. Benslimane (Confirmé)",
             recepteur_interne = "Major Service",
             motif = "Régularisation dotation hebdomadaire",
+            chef_service = "Dr. Benslimane",
+            beneficiaire_ids = "",
             id = sortieId
         )
         val updated = queries.selectSortieById(sortieId).executeAsOne()

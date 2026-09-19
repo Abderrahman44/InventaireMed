@@ -64,6 +64,11 @@ fun DbBonDeSortie.toDomain(items: List<SortieItem> = emptyList()): BonDeSortie =
     serviceId = service_id,
     localId = local_id,
     date = date,
+    demandeur = demandeur,
+    recepteurInterne = recepteur_interne,
+    motif = motif,
+    chefService = chef_service,
+    beneficiaireIds = beneficiaire_ids.split(",").mapNotNull { it.trim().toLongOrNull() },
     items = items
 )
 

@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,12 +39,16 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.InputChip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -85,6 +91,7 @@ import androidx.compose.ui.window.Dialog
 import org.abdat.inventory.domain.model.StockArticle
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
+import org.abdat.inventory.ui.components.AppDateTimePickerField
 import org.abdat.inventory.ui.components.AppSearchBar
 import org.abdat.inventory.ui.components.MetricCard
 import org.abdat.inventory.util.CsvExporter
@@ -530,7 +537,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                         }
                     }
 
-                    // Row 2: Imputation Analytique (Service, Local, Récepteur, Motif)
+                    // Row 2: Imputation Analytique (Service, Local, Chef de Service, Motif)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -551,7 +558,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                         }
 
                         // Local / Salle Dropdown
-                        Column(modifier = Modifier.weight(1.2f)) {
+                        Column(modifier = Modifier.weight(1.1f)) {
                             Text(
                                 text = "LOCAL / SALLE DESTINATION",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
@@ -565,24 +572,22 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                             )
                         }
 
-                        // Récepteur Interne
+                        // Chef de Service Card (Always Included on Sorties)
                         Column(modifier = Modifier.weight(1.3f)) {
                             Text(
-                                text = "RÉCEPTEUR INTERNE (AGENT / ÉMARGÉ) *",
+                                text = "CHEF DE SERVICE (SUPERVISION) *",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = AppTheme.colors.textSecondary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            CustomInputField(
-                                value = state.recepteurInterne,
-                                onValueChange = { viewModel.updateRecepteurInterne(it) },
-                                placeholder = "Nom de l'agent récepteur",
-                                leadingIcon = Icons.Default.Badge
+                            ChefDeServiceCard(
+                                chefName = state.chefDeServiceName,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
 
                         // Motif d'Imputation (Free-text input)
-                        Column(modifier = Modifier.weight(1.4f)) {
+                        Column(modifier = Modifier.weight(1.2f)) {
                             Text(
                                 text = "MOTIF / TYPE D'IMPUTATION *",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
@@ -595,6 +600,53 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                 placeholder = "Ex: Consommation courante, Urgence..."
                             )
                         }
+                    }
+
+                    // Row 3: Personnel Bénéficiaire Destinataire (Multi-select: 0 = tout le service, 1 = individuel, 2+ = partagé)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, RoundedCornerShape(8.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "PERSONNEL BÉNÉFICIAIRE DESTINATAIRE",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = AppTheme.colors.textPrimary
+                                )
+                                Text(
+                                    text = "(Optionnel — laisser vide pour tout le service, ou multi-sélectionner ex: 1 pour vêtement, 2-3 pour imprimante)",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = AppTheme.colors.textSecondary
+                                )
+                            }
+                            if (state.selectedBeneficiaryIds.isNotEmpty()) {
+                                TextButton(
+                                    onClick = { viewModel.clearBeneficiaries() },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Réinitialiser (Tout le service)", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+
+                        BeneficiaryPersonnelMultiSelector(
+                            availableStaff = state.availableServiceStaff,
+                            selectedIds = state.selectedBeneficiaryIds,
+                            onToggleBeneficiary = { viewModel.toggleBeneficiary(it) },
+                            onClearAll = { viewModel.clearBeneficiaries() }
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -892,8 +944,8 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                             color = AppTheme.colors.textSecondary
                         )
                         Text(
-                            text = "DEMANDEUR / RÉCEPTEUR",
-                            modifier = Modifier.weight(1.8f),
+                            text = "AFFECTATION & BÉNÉFICIAIRE(S)",
+                            modifier = Modifier.weight(2.2f),
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = AppTheme.colors.textSecondary
                         )
@@ -968,6 +1020,15 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                         color = AppTheme.colors.textPrimary
                                     )
+                                    if (item.chefDeServiceName.isNotBlank()) {
+                                        Text(
+                                            text = "Chef: ${item.chefDeServiceName}",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                     Text(
                                         text = item.localName,
                                         style = MaterialTheme.typography.labelSmall,
@@ -975,26 +1036,23 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                     )
                                 }
 
-                                Column(modifier = Modifier.weight(1.8f)) {
-                                    if (item.demandeur.isNotBlank()) {
+                                Column(modifier = Modifier.weight(2.2f)) {
+                                    Text(
+                                        text = item.beneficiaireNames.ifBlank { "Ensemble du service" },
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = if (item.beneficiaireNames.isBlank() || item.beneficiaireNames.startsWith("Ensemble")) FontWeight.Normal else FontWeight.SemiBold
+                                        ),
+                                        color = if (item.beneficiaireNames.isBlank() || item.beneficiaireNames.startsWith("Ensemble")) MaterialTheme.colorScheme.primary else AppTheme.colors.textPrimary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (item.demandeur.isNotBlank() && item.demandeur != item.chefDeServiceName) {
                                         Text(
                                             text = "Dem: ${item.demandeur}",
-                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                            color = AppTheme.colors.textPrimary
-                                        )
-                                    }
-                                    if (item.recepteurInterne.isNotBlank()) {
-                                        Text(
-                                            text = "Réc: ${item.recepteurInterne}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = AppTheme.colors.textSecondary
-                                        )
-                                    }
-                                    if (item.demandeur.isBlank() && item.recepteurInterne.isBlank()) {
-                                        Text(
-                                            text = item.recipient.ifBlank { "-" },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = AppTheme.colors.textSecondary
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            color = AppTheme.colors.textSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
@@ -1322,152 +1380,21 @@ private fun CustomInputField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DateTimePickerInputField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
-    var tempDate by remember { mutableStateOf("") }
-
-    val initialMillis = remember(value) {
-        try {
-            if (value.isNotBlank()) {
-                val cleanDate = value.trim().substringBefore("T").substringBefore(" ")
-                kotlin.time.Instant.parse("${cleanDate}T00:00:00Z").toEpochMilliseconds()
-            } else null
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .background(AppTheme.colors.surfaceWhite, RoundedCornerShape(8.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Default.CalendarToday,
-            contentDescription = null,
-            modifier = Modifier
-                .size(16.dp)
-                .clickable { showDatePicker = true },
-            tint = MaterialTheme.colorScheme.primary
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (value.isEmpty()) {
-                Text(
-                    text = "YYYY-MM-DD HH:mm",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTheme.colors.textSecondary.copy(alpha = 0.6f)
-                )
-            }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = AppTheme.colors.textPrimary
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        IconButton(
-            onClick = { showDatePicker = true },
-            modifier = Modifier.size(24.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.EditCalendar,
-                contentDescription = "Sélectionner la date et l'heure",
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-
-    if (showDatePicker) {
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val selectedDate = kotlinx.datetime.Instant.fromEpochMilliseconds(millis)
-                                .toLocalDateTime(kotlinx.datetime.TimeZone.UTC)
-                                .date.toString()
-                            tempDate = selectedDate
-                            showDatePicker = false
-                            showTimePicker = true
-                        } ?: run {
-                            showDatePicker = false
-                        }
-                    }
-                ) {
-                    Text("Suivant (Heure)")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Annuler")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-    if (showTimePicker) {
-        val existingTime = value.substringAfter(" ", "10:30")
-        val initH = existingTime.split(":").firstOrNull()?.toIntOrNull() ?: 10
-        val initM = existingTime.split(":").getOrNull(1)?.toIntOrNull() ?: 30
-        val timePickerState = rememberTimePickerState(
-            initialHour = initH,
-            initialMinute = initM,
-            is24Hour = true
-        )
-
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val h = timePickerState.hour.toString().padStart(2, '0')
-                        val m = timePickerState.minute.toString().padStart(2, '0')
-                        val datePart = tempDate.ifBlank { value.substringBefore(" ") }
-                        onValueChange("$datePart $h:$m")
-                        showTimePicker = false
-                    }
-                ) {
-                    Text("Valider")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) {
-                    Text("Annuler")
-                }
-            },
-            title = { Text("Sélectionner l'heure de sortie") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    TimePicker(state = timePickerState)
-                }
-            }
-        )
-    }
+    AppDateTimePickerField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        placeholder = "YYYY-MM-DD HH:mm",
+        timeDialogTitle = "Sélectionner l'heure de sortie",
+        height = 40.dp,
+        shape = RoundedCornerShape(8.dp)
+    )
 }
 
 @Composable
@@ -1565,6 +1492,252 @@ private fun LocalDropdownSelector(
                         expanded = false
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChefDeServiceCard(
+    chefName: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Column(verticalArrangement = Arrangement.Center) {
+                Text(
+                    text = chefName.ifBlank { "Chef non défini" },
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = AppTheme.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Responsable hiérarchique inclus",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BeneficiaryPersonnelMultiSelector(
+    availableStaff: List<org.abdat.inventory.domain.model.Person>,
+    selectedIds: List<Long>,
+    onToggleBeneficiary: (Long) -> Unit,
+    onClearAll: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .background(AppTheme.colors.surfaceWhite, RoundedCornerShape(8.dp))
+                    .border(
+                        1.dp,
+                        if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .clickable { expanded = true }
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (selectedIds.isEmpty()) Icons.Default.Groups else Icons.Default.Person,
+                        contentDescription = null,
+                        tint = if (selectedIds.isNotEmpty()) MaterialTheme.colorScheme.primary else AppTheme.colors.textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    if (selectedIds.isEmpty()) {
+                        Text(
+                            text = "Ensemble du service (Sortie collective)",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        val staffMap = availableStaff.associateBy { it.id }
+                        val names = selectedIds.mapNotNull { staffMap[it]?.fullName }.joinToString(", ")
+                        Text(
+                            text = "${selectedIds.size} sélectionné(s) : $names",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = AppTheme.colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectedIds.isNotEmpty()) {
+                        IconButton(
+                            onClick = onClearAll,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Réinitialiser",
+                                tint = AppTheme.colors.textSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = AppTheme.colors.textSecondary
+                    )
+                }
+            }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.width(360.dp)
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = selectedIds.isEmpty(),
+                                onCheckedChange = {
+                                    onClearAll()
+                                    expanded = false
+                                }
+                            )
+                            Text(
+                                text = "Ensemble du service (Sortie collective)",
+                                fontWeight = if (selectedIds.isEmpty()) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    },
+                    onClick = {
+                        onClearAll()
+                        expanded = false
+                    }
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                if (availableStaff.isEmpty()) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "Aucun personnel individuel enregistré pour ce service",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                        },
+                        onClick = {}
+                    )
+                } else {
+                    availableStaff.forEach { person ->
+                        val isSelected = selectedIds.contains(person.id)
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { onToggleBeneficiary(person.id) }
+                                    )
+                                    Column {
+                                        Text(
+                                            text = person.fullName,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        if (person.isChef || person.notes.isNotBlank()) {
+                                            Text(
+                                                text = if (person.isChef) "Chef de Service" else person.notes,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (person.isChef) MaterialTheme.colorScheme.primary else AppTheme.colors.textSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            onClick = {
+                                onToggleBeneficiary(person.id)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        if (selectedIds.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val staffMap = availableStaff.associateBy { it.id }
+                selectedIds.forEach { id ->
+                    val person = staffMap[id]
+                    if (person != null) {
+                        InputChip(
+                            selected = true,
+                            onClick = { onToggleBeneficiary(id) },
+                            label = { Text(person.fullName, style = MaterialTheme.typography.labelSmall) },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Retirer",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = onClearAll,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text("Tout le service", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
@@ -1774,8 +1947,18 @@ private fun SortieDetailDialog(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Chef de Service :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                    Text(item.chefDeServiceName.ifBlank { "Dr. Responsable de Service" }, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary))
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Local / Destination :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(item.localName, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Personnel Bénéficiaire :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
+                    Text(item.beneficiaireNames.ifBlank { "Ensemble du service (Sortie collective)" }, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

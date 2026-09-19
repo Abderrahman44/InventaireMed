@@ -22,6 +22,9 @@ import org.abdat.inventory.domain.model.BonDeCommande
 import org.abdat.inventory.domain.model.Fournisseur
 import org.abdat.inventory.domain.model.Person
 import org.abdat.inventory.domain.model.Service
+import kotlin.time.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 data class DeliveryVerificationLine(
     val commandeItemId: Long,
@@ -50,6 +53,7 @@ data class DeliveryDisplayItem(
     val commandeReference: String,
     val supplierName: String,
     val supplierConvention: String,
+    val destinationStock: String = "Pharmacie Centrale / Stock Général",
     val serviceName: String = "Pharmacie Centrale",
     val beneficiaireName: String = "Personnel non spécifié",
     val chefDeServiceName: String = "",
@@ -132,6 +136,13 @@ class DeliveriesViewModel(
         }
     }
 
+    private fun currentFormattedDateTime(): String {
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val hh = now.hour.toString().padStart(2, '0')
+        val min = now.minute.toString().padStart(2, '0')
+        return "${now.date} $hh:$min"
+    }
+
     fun loadDeliveries() {
         viewModelScope.launch {
             loadDeliveriesSync()
@@ -182,6 +193,7 @@ class DeliveriesViewModel(
                 commandeReference = commandeRef,
                 supplierName = supplierName,
                 supplierConvention = conventionLabel,
+                destinationStock = "Pharmacie Centrale / Stock Général",
                 serviceName = serviceName,
                 beneficiaireName = beneficiaireName,
                 chefDeServiceName = chefName,
@@ -236,6 +248,7 @@ class DeliveriesViewModel(
 
         _uiState.update { current ->
             current.copy(
+                receptionDate = current.receptionDate.ifBlank { currentFormattedDateTime() },
                 deliveries = displayItems.toImmutableList(),
                 availableCommandes = pendingCommandes.ifEmpty { dbCommandes }.toImmutableList(),
                 availableServices = dbServices.toImmutableList(),
@@ -485,7 +498,7 @@ class DeliveriesViewModel(
             return false
         }
 
-        val receptionDate = date.ifBlank { "2026-09-08" }
+        val receptionDate = date.ifBlank { currentFormattedDateTime() }
 
         try {
             database.transaction {
@@ -547,7 +560,8 @@ class DeliveriesViewModel(
                 it.copy(
                     actionSuccessMessage = "Livraison $referenceBon validée et stock augmenté avec succès.",
                     actionErrorMessage = null,
-                    paperBlReference = "BL-${(1000..9999).random()}"
+                    paperBlReference = "BL-${(1000..9999).random()}",
+                    receptionDate = currentFormattedDateTime()
                 )
             }
             loadDeliveriesSync()

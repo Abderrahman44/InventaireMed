@@ -100,6 +100,15 @@ class SharedLogicDesktopTest {
                 local_num TEXT NOT NULL DEFAULT ''
             );
         """.trimIndent(), 0)
+        initialDriver.execute(null, """
+            CREATE TABLE bon_de_sortie (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                reference_bon TEXT NOT NULL,
+                service_id INTEGER NOT NULL,
+                local_id INTEGER,
+                date TEXT NOT NULL
+            );
+        """.trimIndent(), 0)
         initialDriver.close()
 
         // Now run JvmDatabaseDriverFactory on existing DB
@@ -114,6 +123,9 @@ class SharedLogicDesktopTest {
             app.cash.sqldelight.db.QueryResult.Value(Unit)
         }, 0)
         migratedDriver.executeQuery(null, "SELECT chef_id FROM service", {
+            app.cash.sqldelight.db.QueryResult.Value(Unit)
+        }, 0)
+        migratedDriver.executeQuery(null, "SELECT demandeur, recepteur_interne, motif FROM bon_de_sortie", {
             app.cash.sqldelight.db.QueryResult.Value(Unit)
         }, 0)
         migratedDriver.close()

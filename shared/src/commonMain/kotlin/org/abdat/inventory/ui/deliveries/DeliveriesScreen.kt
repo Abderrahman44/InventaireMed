@@ -88,6 +88,7 @@ import org.abdat.inventory.domain.model.Person
 import org.abdat.inventory.domain.model.Service
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
+import org.abdat.inventory.ui.components.AppDateTimePickerField
 import org.abdat.inventory.ui.components.AppSearchBar
 
 @Composable
@@ -700,11 +701,13 @@ private fun DeliveryRegistrationCard(
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = AppTheme.colors.textPrimary
                         )
-                        DeliveryTextField(
+                        AppDateTimePickerField(
                             value = state.receptionDate,
                             onValueChange = { viewModel.updateReceptionDate(it) },
-                            icon = Icons.Default.CalendarToday,
-                            placeholder = "AAAA-MM-JJ"
+                            placeholder = "AAAA-MM-JJ HH:mm",
+                            timeDialogTitle = "Sélectionner l'heure de réception",
+                            height = 38.dp,
+                            shape = RoundedCornerShape(6.dp)
                         )
                     }
 
@@ -743,20 +746,7 @@ private fun DeliveryRegistrationCard(
                     }
                 }
 
-                // Row 2: Service Destinataire, Personnel Bénéficiaire & Chef de Service
-                ServiceAndBeneficiarySelector(
-                    services = state.availableServices,
-                    selectedServiceId = state.selectedServiceId,
-                    selectedServiceName = state.selectedServiceName,
-                    beneficiaries = state.availableBeneficiaries,
-                    selectedBeneficiaryId = state.selectedBeneficiaryId,
-                    selectedBeneficiaryName = state.selectedBeneficiaryName,
-                    chefDeServiceName = state.chefDeServiceName,
-                    onSelectService = { viewModel.selectService(it) },
-                    onSelectBeneficiary = { viewModel.selectBeneficiary(it) }
-                )
-
-                // Row 3: Mode de réception (Complète vs Partielle)
+                // Row 2: Mode de réception (Complète vs Partielle)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -826,312 +816,9 @@ private fun DeliveryRegistrationCard(
                     }
 
                     Text(
-                        text = "Destinataire : ${state.selectedBeneficiaryName.ifBlank { "Non assigné" }}",
+                        text = "Entrée en stock : Pharmacie Centrale / Magasin Général",
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ServiceAndBeneficiarySelector(
-    services: ImmutableList<Service>,
-    selectedServiceId: Long?,
-    selectedServiceName: String,
-    beneficiaries: ImmutableList<Person>,
-    selectedBeneficiaryId: Long?,
-    selectedBeneficiaryName: String,
-    chefDeServiceName: String,
-    onSelectService: (Long) -> Unit,
-    onSelectBeneficiary: (Long) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Service Selector Dropdown
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Service Bénéficiaire Destinataire *",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = AppTheme.colors.textPrimary
-                    )
-                    Text(
-                        text = "Département",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                ServiceDropdown(
-                    services = services,
-                    selectedServiceId = selectedServiceId,
-                    selectedServiceName = selectedServiceName,
-                    onSelectService = onSelectService
-                )
-            }
-
-            // Beneficiary Person Selector Dropdown
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Personnel Bénéficiaire Réceptionnaire *",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = AppTheme.colors.textPrimary
-                    )
-                    Text(
-                        text = "${beneficiaries.size} agents affectés",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTheme.colors.textSecondary
-                    )
-                }
-                BeneficiaryDropdown(
-                    beneficiaries = beneficiaries,
-                    selectedBeneficiaryId = selectedBeneficiaryId,
-                    selectedBeneficiaryName = selectedBeneficiaryName,
-                    onSelectBeneficiary = onSelectBeneficiary
-                )
-            }
-        }
-
-        // Chef de Service Auto-Resolved Info Card
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SupervisorAccount,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = "Chef de Service (Responsable Hiérarchique) :",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = chefDeServiceName.ifBlank { "Aucun Chef de Service désigné pour ce département" },
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = AppTheme.colors.textPrimary
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Identification V3 Auto",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ServiceDropdown(
-    services: ImmutableList<Service>,
-    selectedServiceId: Long?,
-    selectedServiceName: String,
-    onSelectService: (Long) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(AppTheme.colors.surfaceWhite)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                .clickable { expanded = true }
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Domain,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = selectedServiceName.ifBlank { "Sélectionner un service..." },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    color = AppTheme.colors.textPrimary
-                )
-            }
-            Text(
-                text = "▾",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTheme.colors.textSecondary
-            )
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            services.forEach { service ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(
-                                text = service.name,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                            if (service.localNum.isNotBlank()) {
-                                Text(
-                                    text = "Réf local : ${service.localNum}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        expanded = false
-                        onSelectService(service.id)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BeneficiaryDropdown(
-    beneficiaries: ImmutableList<Person>,
-    selectedBeneficiaryId: Long?,
-    selectedBeneficiaryName: String,
-    onSelectBeneficiary: (Long) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(AppTheme.colors.surfaceWhite)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                .clickable { expanded = true }
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = AppTheme.colors.textSecondary
-                )
-                Text(
-                    text = selectedBeneficiaryName.ifBlank {
-                        if (beneficiaries.isEmpty()) "Aucun personnel dans ce service" else "Sélectionner un bénéficiaire..."
-                    },
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                    color = AppTheme.colors.textPrimary
-                )
-            }
-            Text(
-                text = "▾",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTheme.colors.textSecondary
-            )
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            if (beneficiaries.isEmpty()) {
-                DropdownMenuItem(
-                    text = { Text("Aucun personnel rattaché à ce service", style = MaterialTheme.typography.bodySmall) },
-                    onClick = { expanded = false },
-                    enabled = false
-                )
-            } else {
-                beneficiaries.forEach { person ->
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(
-                                    text = person.fullName,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                                )
-                                if (person.notes.isNotBlank()) {
-                                    Text(
-                                        text = person.notes,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = AppTheme.colors.textSecondary
-                                    )
-                                }
-                            }
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelectBeneficiary(person.id)
-                        }
                     )
                 }
             }
@@ -1503,8 +1190,6 @@ private fun DeliveryReconciliationTable(
                         viewModel.validateDeliverySync(
                             referenceBon = state.paperBlReference,
                             date = state.receptionDate,
-                            serviceId = state.selectedServiceId,
-                            beneficiaireId = state.selectedBeneficiaryId,
                             isPartial = state.receptionType == ReceptionType.PARTIAL
                         )
                     },
@@ -1656,7 +1341,7 @@ private fun DeliveryHistoryCard(
                         modifier = Modifier.weight(1.8f)
                     )
                     Text(
-                        text = "SERVICE & BÉNÉFICIAIRE",
+                        text = "DESTINATION STOCK",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = AppTheme.colors.textSecondary,
                         modifier = Modifier.weight(2f)
@@ -1747,22 +1432,15 @@ private fun DeliveryHistoryCard(
                             }
                             Column(modifier = Modifier.weight(2f)) {
                                 Text(
-                                    text = item.serviceName,
+                                    text = "Entrée en Stock",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Bénéficiaire : ${item.beneficiaireName}",
+                                    text = item.destinationStock,
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = AppTheme.colors.textSecondary
                                 )
-                                if (item.chefDeServiceName.isNotBlank()) {
-                                    Text(
-                                        text = "Chef : ${item.chefDeServiceName}",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                                        color = AppTheme.colors.textSecondary
-                                    )
-                                }
                             }
                             Text(
                                 text = item.dateLivraison,
@@ -1911,9 +1589,7 @@ private fun DeliveryDetailDialog(
                     DetailRow(label = "Convention Cadre :", value = delivery.supplierConvention)
                     DetailRow(label = "Bon de Commande Associé :", value = delivery.commandeReference)
                     DetailRow(label = "Date de Réception :", value = delivery.dateLivraison)
-                    DetailRow(label = "Service Destinataire :", value = delivery.serviceName)
-                    DetailRow(label = "Personnel Bénéficiaire :", value = delivery.beneficiaireName)
-                    DetailRow(label = "Chef de Service :", value = delivery.chefDeServiceName.ifBlank { "Non assigné" })
+                    DetailRow(label = "Destination Stock :", value = delivery.destinationStock)
                     DetailRow(label = "Nombre d'Articles :", value = "${delivery.itemsCount} références")
                     DetailRow(label = "Montant Total Valorisé :", value = "${formatDzd(delivery.totalAmountDzd)} DZD")
                     DetailRow(label = "Statut Validation :", value = delivery.statusLabel)

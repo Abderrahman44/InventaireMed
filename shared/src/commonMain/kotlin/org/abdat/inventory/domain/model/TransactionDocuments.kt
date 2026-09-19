@@ -54,6 +54,11 @@ data class BonDeSortie(
     val serviceId: Long,
     val localId: Long? = null,
     val date: String,
+    val demandeur: String = "",
+    val recepteurInterne: String = "",
+    val motif: String = "",
+    val chefService: String = "",
+    val beneficiaireIds: List<Long> = emptyList(),
     val items: List<SortieItem> = emptyList()
 )
 

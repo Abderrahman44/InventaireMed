@@ -58,6 +58,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import org.abdat.inventory.domain.model.CategoryTaxonomy
+import org.abdat.inventory.ui.components.ArticleCategoryPicker
+import org.abdat.inventory.ui.components.rememberArticleCategorySelection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -357,6 +360,7 @@ fun DechargeScreen(
         CreateDechargeDialog(
             nextReference = state.nextGeneratedReference,
             availableArticles = state.availableArticles,
+            taxonomy = state.taxonomy,
             onDismiss = { viewModel.closeCreateDialog() },
             onConfirm = { ref, org, donor, dt, notes, lines ->
                 viewModel.createDechargeVoucher(ref, org, donor, dt, notes, lines)
@@ -370,6 +374,7 @@ fun DechargeScreen(
 private fun CreateDechargeDialog(
     nextReference: String,
     availableArticles: List<StockArticle>,
+    taxonomy: CategoryTaxonomy,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, String, String, List<DechargeDraftLine>) -> Unit
 ) {
@@ -393,8 +398,12 @@ private fun CreateDechargeDialog(
     var newCodeArticle by remember { mutableStateOf("") }
     var newDesignation by remember { mutableStateOf("") }
     var newUnite by remember { mutableStateOf("U") }
-    var newFamily by remember { mutableStateOf("Matériel Médical") }
-    var newSousFamily by remember { mutableStateOf("Divers") }
+    val categorySelection = rememberArticleCategorySelection(
+        family = "",
+        sousFamily = "",
+        taxonomy = taxonomy
+    )
+    var showCategoryErrors by remember { mutableStateOf(false) }
     var newQuantityText by remember { mutableStateOf("10.0") }
     var newExpirationDate by remember { mutableStateOf("") }
     var newArticleError by remember { mutableStateOf(false) }
@@ -578,20 +587,12 @@ private fun CreateDechargeDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = newFamily,
-                            onValueChange = { newFamily = it },
-                            label = { Text("Famille") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = newSousFamily,
-                            onValueChange = { newSousFamily = it },
-                            label = { Text("Sous-famille") },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    ArticleCategoryPicker(
+                        taxonomy = taxonomy,
+                        selection = categorySelection,
+                        showErrors = showCategoryErrors,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -615,7 +616,11 @@ private fun CreateDechargeDialog(
                     Button(
                         onClick = {
                             val qty = newQuantityText.toDoubleOrNull() ?: 0.0
-                            if (newCodeArticle.isBlank() || newDesignation.isBlank() || qty <= 0.0) {
+                            val categoryLabels = categorySelection.resolvedLabels(taxonomy)
+                            val categoryError = categoryLabels == null
+                            showCategoryErrors = categoryError
+                            val hasBasicError = newCodeArticle.isBlank() || newDesignation.isBlank() || qty <= 0.0
+                            if (hasBasicError || categoryError) {
                                 newArticleError = true
                                 return@Button
                             }
@@ -624,8 +629,8 @@ private fun CreateDechargeDialog(
                                     codeArticle = newCodeArticle.trim(),
                                     designation = newDesignation.trim(),
                                     unite = newUnite.trim().ifBlank { "U" },
-                                    family = newFamily.trim(),
-                                    sousFamily = newSousFamily.trim(),
+                                    family = categoryLabels.first,
+                                    sousFamily = categoryLabels.second,
                                     quantity = qty,
                                     expirationDate = newExpirationDate.trim().ifBlank { null },
                                     article = null
@@ -635,6 +640,9 @@ private fun CreateDechargeDialog(
                             newDesignation = ""
                             newExpirationDate = ""
                             newArticleError = false
+                            showCategoryErrors = false
+                            categorySelection.selectFamily("", taxonomy)
+                            categorySelection.selectSousFamily("")
                         },
                         modifier = Modifier.align(Alignment.End)
                     ) {

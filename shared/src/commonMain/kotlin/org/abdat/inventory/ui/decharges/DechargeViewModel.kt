@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.abdat.inventory.data.mapper.toDomain
+import org.abdat.inventory.data.repository.CategoryRepository
 import org.abdat.inventory.database.AppDatabase
+import org.abdat.inventory.domain.model.CategoryTaxonomy
 import org.abdat.inventory.domain.model.DechargeItem
 import org.abdat.inventory.domain.model.PapierDecharge
 import org.abdat.inventory.domain.model.StockArticle
@@ -53,11 +55,13 @@ data class DechargesUiState(
     val isCreateDialogOpen: Boolean = false,
     val isLoading: Boolean = false,
     val nextGeneratedReference: String = "DCH-2026-001",
-    val message: String? = null
+    val message: String? = null,
+    val taxonomy: CategoryTaxonomy = CategoryTaxonomy()
 )
 
 class DechargeViewModel(
     private val database: AppDatabase,
+    private val categoryRepository: CategoryRepository = CategoryRepository(database, Dispatchers.IO),
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
@@ -65,7 +69,14 @@ class DechargeViewModel(
     val uiState: StateFlow<DechargesUiState> = _uiState.asStateFlow()
 
     init {
+        _uiState.update { it.copy(taxonomy = categoryRepository.currentTaxonomy()) }
         loadDataSync()
+
+        viewModelScope.launch {
+            categoryRepository.taxonomy.collect { taxonomy ->
+                _uiState.update { it.copy(taxonomy = taxonomy) }
+            }
+        }
 
         viewModelScope.launch {
             combine(
@@ -136,6 +147,23 @@ class DechargeViewModel(
             return false
         }
 
+        val taxonomy = categoryRepository.currentTaxonomy()
+        for (line in lines) {
+            val existing = database.appDatabaseQueries.selectStockArticleByCode(line.codeArticle).executeAsOneOrNull()
+            if (existing == null) {
+                val resolved = taxonomy.resolvePair(line.family, line.sousFamily)
+                if (resolved == null) {
+                    _uiState.update {
+                        it.copy(
+                            message = "Famille « ${line.family} » / sous-famille « ${line.sousFamily} » non configurée pour l'article « ${line.designation.ifBlank { line.codeArticle }} ». " +
+                                "Sélectionnez une catégorie existante ou configurez-la dans Paramètres & Config."
+                        )
+                    }
+                    return false
+                }
+            }
+        }
+
         database.transaction {
             database.appDatabaseQueries.insertDecharge(
                 reference_bon = referenceBon.trim(),
@@ -164,13 +192,15 @@ class DechargeViewModel(
                         code_article = line.codeArticle
                     )
                 } else {
+                    val (familyItem, sousFamilyItem) = taxonomy.resolvePair(line.family, line.sousFamily)
+                        ?: error("Unresolved category pair for ${line.codeArticle}")
                     database.appDatabaseQueries.insertStockArticle(
                         code_article = line.codeArticle,
                         additional_reference_id = "",
                         designation = line.designation,
                         unite_quantite = line.unite.ifBlank { "U" },
-                        family = line.family,
-                        sous_family = line.sousFamily,
+                        family = familyItem.label,
+                        sous_family = sousFamilyItem.label,
                         quantity = line.quantity,
                         unit_price = 0.0,
                         expiration_date = line.expirationDate,

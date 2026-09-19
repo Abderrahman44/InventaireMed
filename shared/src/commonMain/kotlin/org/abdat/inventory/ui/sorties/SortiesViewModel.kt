@@ -24,6 +24,7 @@ import org.abdat.inventory.data.repository.StockRepository
 import org.abdat.inventory.data.repository.StockSnapshot
 import org.abdat.inventory.database.AppDatabase
 import org.abdat.inventory.domain.model.Local
+import org.abdat.inventory.domain.model.Person
 import org.abdat.inventory.domain.model.Service
 import org.abdat.inventory.domain.model.StockArticle
 
@@ -53,6 +54,8 @@ data class SortieDisplayItem(
     val recipient: String,
     val demandeur: String = "",
     val recepteurInterne: String = "",
+    val chefDeServiceName: String = "",
+    val beneficiaireNames: String = "",
     val motif: String = "",
     val date: String,
     val itemsCount: Int,
@@ -96,6 +99,11 @@ data class SortiesUiState(
     val localsForSelectedService: ImmutableList<Local> = persistentListOf(),
     val selectedLocal: Local? = null,
 
+    // Beneficiary Staff & Head of Service (Chef de Service)
+    val chefDeServiceName: String = "",
+    val availableServiceStaff: ImmutableList<Person> = persistentListOf(),
+    val selectedBeneficiaryIds: ImmutableList<Long> = persistentListOf(),
+
     // Available Inventory articles for adding to draft
     val availableArticles: ImmutableList<StockArticle> = persistentListOf(),
 
@@ -110,6 +118,7 @@ data class SortiesUiState(
     val actionSuccessMessage: String? = null,
     val actionErrorMessage: String? = null
 ) {
+    val motif: String get() = motive
     val hasExceededLines: Boolean get() = draftLines.any { it.isExceeded || it.issueQuantity <= 0.0 }
     val canSubmit: Boolean get() = draftLines.isNotEmpty() && !hasExceededLines && selectedService != null
 }
@@ -135,8 +144,9 @@ class SortiesViewModel(
             combine(
                 database.appDatabaseQueries.selectAllSorties().asFlow().mapToList(dispatcher),
                 database.appDatabaseQueries.selectAllServices().asFlow().mapToList(dispatcher),
-                database.appDatabaseQueries.selectAllLocals().asFlow().mapToList(dispatcher)
-            ) { _, _, _ -> Unit }
+                database.appDatabaseQueries.selectAllLocals().asFlow().mapToList(dispatcher),
+                database.appDatabaseQueries.selectAllPersons().asFlow().mapToList(dispatcher)
+            ) { _, _, _, _ -> Unit }
                 .collect {
                     loadSortiesSync()
                 }
@@ -175,10 +185,12 @@ class SortiesViewModel(
         val dbServices = database.appDatabaseQueries.selectAllServices().executeAsList().map { it.toDomain() }
         val dbLocals = database.appDatabaseQueries.selectAllLocals().executeAsList().map { it.toDomain() }
         val dbArticles = stockRepository.currentSnapshot().articles
+        val dbPersons = database.appDatabaseQueries.selectAllPersons().executeAsList().map { it.toDomain() }
 
         val serviceMap = dbServices.associateBy { it.id }
         val localMap = dbLocals.associateBy { it.id }
         val articleMap = dbArticles.associateBy { it.codeArticle }
+        val personMap = dbPersons.associateBy { it.id }
 
         val displayItems = dbSorties.map { sortie ->
             val items = database.appDatabaseQueries.selectSortieItemsBySortieId(sortie.id).executeAsList()
@@ -191,13 +203,33 @@ class SortiesViewModel(
             val local = sortie.local_id?.let { localMap[it] }
             val localName = local?.name ?: "Local non spécifié"
 
+            val resolvedChef = if (!sortie.chef_service.isNullOrBlank()) {
+                sortie.chef_service
+            } else {
+                service?.chefName?.takeIf { it.isNotBlank() }
+                    ?: dbPersons.firstOrNull { it.serviceId == sortie.service_id && it.isChef }?.fullName
+                    ?: dbPersons.firstOrNull { it.serviceId == sortie.service_id && it.notes.contains("Chef", ignoreCase = true) }?.fullName
+                    ?: "Responsable de service"
+            }
+
+            val benefIds = sortie.beneficiaire_ids?.split(",")?.mapNotNull { it.trim().toLongOrNull() } ?: emptyList()
+            val benefNames = if (benefIds.isNotEmpty()) {
+                benefIds.mapNotNull { personMap[it]?.fullName }.joinToString(", ")
+            } else {
+                if (!sortie.recepteur_interne.isNullOrBlank() && !sortie.recepteur_interne.startsWith("Ensemble")) {
+                    sortie.recepteur_interne
+                } else {
+                    "Ensemble du service"
+                }
+            }
+
             val demandeur = sortie.demandeur
             val recepteur = sortie.recepteur_interne
             val recipientDisplay = when {
                 demandeur.isNotBlank() && recepteur.isNotBlank() -> "$demandeur / $recepteur"
                 demandeur.isNotBlank() -> demandeur
                 recepteur.isNotBlank() -> recepteur
-                else -> "Non spécifié"
+                else -> benefNames
             }
 
             SortieDisplayItem(
@@ -209,6 +241,8 @@ class SortiesViewModel(
                 recipient = recipientDisplay,
                 demandeur = demandeur,
                 recepteurInterne = recepteur,
+                chefDeServiceName = resolvedChef,
+                beneficiaireNames = benefNames,
                 motif = sortie.motif,
                 date = sortie.date,
                 itemsCount = items.size,
@@ -225,12 +259,21 @@ class SortiesViewModel(
             dbLocals.filter { it.serviceId == currentSelectedService.id }
         } else emptyList()
 
+        val staffForService = if (currentSelectedService != null) {
+            dbPersons.filter { it.serviceId == currentSelectedService.id }
+        } else emptyList()
+
+        val chefNameForSelected = currentSelectedService?.let { srv ->
+            srv.chefName?.takeIf { it.isNotBlank() }
+                ?: staffForService.firstOrNull { it.isChef }?.fullName
+                ?: staffForService.firstOrNull { it.notes.contains("Chef", ignoreCase = true) }?.fullName
+                ?: "Dr. Responsable de Service"
+        } ?: ""
+
         val nextId = (dbSorties.maxOfOrNull { it.id } ?: 0L) + 1L
         val generatedSystemRef = "BS-2026-${nextId.toString().padStart(3, '0')}"
 
-        // Line Articles DeStocker list must initialize as an empty list, removing hardcoded mock products
         val initialDraftLines = _uiState.value.draftLines
-
         val totalUnits = initialDraftLines.sumOf { it.issueQuantity }
         val totalVal = initialDraftLines.sumOf { it.totalCost }
 
@@ -242,7 +285,10 @@ class SortiesViewModel(
                 services = dbServices.toImmutableList(),
                 selectedService = currentSelectedService,
                 localsForSelectedService = localsForService.toImmutableList(),
-                selectedLocal = current.selectedLocal ?: localsForService.firstOrNull(),
+                selectedLocal = current.selectedLocal?.takeIf { it.serviceId == currentSelectedService?.id } ?: localsForService.firstOrNull(),
+                availableServiceStaff = staffForService.toImmutableList(),
+                chefDeServiceName = current.chefDeServiceName.ifBlank { chefNameForSelected },
+                demandeur = current.demandeur.ifBlank { chefNameForSelected },
                 draftLines = initialDraftLines.toImmutableList(),
                 totalUnitsIssued = totalUnits,
                 totalValuationDzd = totalVal,
@@ -281,6 +327,8 @@ class SortiesViewModel(
                     item.recipient.lowercase().contains(query) ||
                     item.demandeur.lowercase().contains(query) ||
                     item.recepteurInterne.lowercase().contains(query) ||
+                    item.chefDeServiceName.lowercase().contains(query) ||
+                    item.beneficiaireNames.lowercase().contains(query) ||
                     item.motif.lowercase().contains(query)
         }
 
@@ -290,15 +338,52 @@ class SortiesViewModel(
     fun selectService(serviceId: Long) {
         val selected = _uiState.value.services.firstOrNull { it.id == serviceId } ?: return
         val dbLocals = database.appDatabaseQueries.selectLocalsByServiceId(serviceId).executeAsList().map { it.toDomain() }
-        val chefRecipient = selected.chefName?.takeIf { it.isNotBlank() }
+        val dbStaff = database.appDatabaseQueries.selectPersonsByServiceId(serviceId).executeAsList().map { it.toDomain() }
+        val chefName = selected.chefName?.takeIf { it.isNotBlank() }
+            ?: dbStaff.firstOrNull { it.isChef }?.fullName
+            ?: dbStaff.firstOrNull { it.notes.contains("Chef", ignoreCase = true) }?.fullName
+            ?: "Dr. Responsable de Service"
 
         _uiState.update { current ->
             current.copy(
                 selectedService = selected,
                 localsForSelectedService = dbLocals.toImmutableList(),
                 selectedLocal = dbLocals.firstOrNull(),
-                demandeur = if (current.demandeur.isBlank()) (chefRecipient ?: "") else current.demandeur,
-                recipientName = chefRecipient?.let { "Chef: $it" } ?: current.recipientName
+                availableServiceStaff = dbStaff.toImmutableList(),
+                selectedBeneficiaryIds = persistentListOf(), // Reset on service change
+                chefDeServiceName = chefName,
+                demandeur = if (current.demandeur.isBlank() || current.demandeur == current.chefDeServiceName) chefName else current.demandeur,
+                recepteurInterne = "",
+                recipientName = "Chef: $chefName"
+            )
+        }
+    }
+
+    fun toggleBeneficiary(personId: Long) {
+        _uiState.update { current ->
+            val updated = if (current.selectedBeneficiaryIds.contains(personId)) {
+                current.selectedBeneficiaryIds.filterNot { it == personId }
+            } else {
+                current.selectedBeneficiaryIds + personId
+            }
+            val staffMap = current.availableServiceStaff.associateBy { it.id }
+            val summaryText = if (updated.isEmpty()) {
+                ""
+            } else {
+                updated.mapNotNull { staffMap[it]?.fullName }.joinToString(", ")
+            }
+            current.copy(
+                selectedBeneficiaryIds = updated.toImmutableList(),
+                recepteurInterne = summaryText
+            )
+        }
+    }
+
+    fun clearBeneficiaries() {
+        _uiState.update { current ->
+            current.copy(
+                selectedBeneficiaryIds = persistentListOf(),
+                recepteurInterne = ""
             )
         }
     }
@@ -474,6 +559,17 @@ class SortiesViewModel(
         }
 
         val issueDateStr = date.ifBlank { currentFormattedDateTime() }
+        val benefIdsStr = state.selectedBeneficiaryIds.joinToString(",")
+        val staffMap = state.availableServiceStaff.associateBy { it.id }
+        val computedRecepteur = if (state.selectedBeneficiaryIds.isNotEmpty()) {
+            state.selectedBeneficiaryIds.mapNotNull { staffMap[it]?.fullName }.joinToString(", ")
+        } else {
+            "Ensemble du service"
+        }
+        val finalRecepteur = recepteurInterne.ifBlank { computedRecepteur }
+        val finalChef = state.chefDeServiceName.ifBlank {
+            state.selectedService?.chefName ?: "Chef de Service"
+        }
 
         try {
             database.transaction {
@@ -483,9 +579,11 @@ class SortiesViewModel(
                     service_id = serviceId,
                     local_id = localId,
                     date = issueDateStr,
-                    demandeur = demandeur.trim(),
-                    recepteur_interne = recepteurInterne.trim(),
-                    motif = motif.trim()
+                    demandeur = demandeur.trim().ifBlank { finalChef },
+                    recepteur_interne = finalRecepteur.trim(),
+                    motif = motif.trim(),
+                    chef_service = finalChef.trim(),
+                    beneficiaire_ids = benefIdsStr
                 )
                 val sortieId = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
 
@@ -517,10 +615,11 @@ class SortiesViewModel(
                     systemReference = nextRef,
                     paperStubReference = "BSP-${(4400 + nextId)}",
                     issueDate = currentFormattedDateTime(),
-                    demandeur = "",
+                    demandeur = finalChef,
                     recepteurInterne = "",
                     recipientName = "",
                     motive = "",
+                    selectedBeneficiaryIds = persistentListOf(),
                     draftLines = persistentListOf(),
                     totalUnitsIssued = 0.0,
                     totalValuationDzd = 0.0

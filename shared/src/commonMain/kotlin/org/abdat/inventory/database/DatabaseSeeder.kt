@@ -657,7 +657,9 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             date = "2026-09-04 09:15",
             demandeur = "Dr. Amine Benali (Chef Bloc)",
             recepteur_interne = "Infirmier Karim Meftah",
-            motif = "Consommation Interne Courante - Intervention Chirurgicale"
+            motif = "Consommation Interne Courante - Intervention Chirurgicale",
+            chef_service = "Dr. Amine Benali",
+            beneficiaire_ids = ""
         )
         val bs1Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertSortieItem(
@@ -680,7 +682,9 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             date = "2026-09-06 14:40",
             demandeur = "Ing. S. Mansouri (Biomédical)",
             recepteur_interne = "Technicien Yacine Cherif",
-            motif = "Maintenance Préventive et Tests Systèmes"
+            motif = "Maintenance Préventive et Tests Systèmes",
+            chef_service = "Dr. Farida Ouali",
+            beneficiaire_ids = ""
         )
         val bs2Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertSortieItem(
@@ -697,7 +701,9 @@ fun seedInitialDataIfEmpty(database: AppDatabase) {
             date = "2026-09-07 11:20",
             demandeur = "Pr. Rachid Khelil (Directeur Général)",
             recepteur_interne = "Secrétaire Amel Dahmani",
-            motif = "Dotation Initiale Matériel Informatique et Bureautique"
+            motif = "Dotation Initiale Matériel Informatique et Bureautique",
+            chef_service = "Pr. Rachid Khelil",
+            beneficiaire_ids = ""
         )
         val bs3Id = database.appDatabaseQueries.selectLastInsertedRowId().executeAsOne()
         database.appDatabaseQueries.insertSortieItem(

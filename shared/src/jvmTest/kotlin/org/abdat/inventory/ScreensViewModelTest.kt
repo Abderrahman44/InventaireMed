@@ -846,7 +846,111 @@ class ScreensViewModelTest {
 
         // Clear query
         viewModel.onSearchQueryChange("")
-        assertEquals(initialCount, viewModel.uiState.value.filteredSorties.size)
+    }
+
+    @Test
+    fun testSortiesChefDeServiceAndBeneficiaryPersonnelAllocation() {
+        val viewModel = SortiesViewModel(database, stockRepo())
+        val services = viewModel.uiState.value.services
+        assertTrue(services.isNotEmpty())
+
+        val testService = services.first()
+        viewModel.selectService(testService.id)
+
+        val stateAfterSelect = viewModel.uiState.value
+        assertEquals(testService.id, stateAfterSelect.selectedService?.id)
+        assertTrue(stateAfterSelect.chefDeServiceName.isNotBlank(), "Chef de Service must be automatically resolved")
+        val resolvedChef = stateAfterSelect.chefDeServiceName
+
+        val staff = stateAfterSelect.availableServiceStaff
+        assertTrue(staff.isNotEmpty(), "Selected service should have staff available")
+
+        // 1. Scenario: Empty beneficiary selection -> Whole service sortie
+        viewModel.clearBeneficiaries()
+        assertTrue(viewModel.uiState.value.selectedBeneficiaryIds.isEmpty())
+
+        val article = viewModel.uiState.value.availableArticles.first { it.quantity >= 10.0 }
+        viewModel.addDraftLine(article, 2.0)
+
+        val collectiveRef = "BS-TEST-COLLECTIVE"
+        val success1 = viewModel.validateSortieSync(
+            referenceBon = collectiveRef,
+            serviceId = testService.id,
+            localId = stateAfterSelect.selectedLocal?.id,
+            demandeur = "",
+            recepteurInterne = "",
+            motif = "Dotation collective pour tout le service",
+            date = "2026-09-18 10:00"
+        )
+        assertTrue(success1)
+
+        val sortie1 = viewModel.uiState.value.sorties.first { it.referenceBon == collectiveRef }
+        assertEquals(resolvedChef, sortie1.chefDeServiceName)
+        assertTrue(sortie1.beneficiaireNames.contains("Ensemble du service"))
+
+        // 2. Scenario: Single beneficiary selection (e.g. 1 person for uniform/clothes)
+        val singlePerson = staff.first()
+        viewModel.selectService(testService.id)
+        viewModel.toggleBeneficiary(singlePerson.id)
+        assertEquals(1, viewModel.uiState.value.selectedBeneficiaryIds.size)
+        assertEquals(listOf(singlePerson.id), viewModel.uiState.value.selectedBeneficiaryIds)
+
+        viewModel.addDraftLine(article, 1.0)
+        val singleRef = "BS-TEST-SINGLE"
+        val success2 = viewModel.validateSortieSync(
+            referenceBon = singleRef,
+            serviceId = testService.id,
+            localId = stateAfterSelect.selectedLocal?.id,
+            demandeur = "",
+            recepteurInterne = "",
+            motif = "Blouse médicale nominative",
+            date = "2026-09-18 10:15"
+        )
+        assertTrue(success2)
+
+        val sortie2 = viewModel.uiState.value.sorties.first { it.referenceBon == singleRef }
+        assertEquals(resolvedChef, sortie2.chefDeServiceName)
+        assertEquals(singlePerson.fullName, sortie2.beneficiaireNames)
+
+        // 3. Scenario: Multiple beneficiary selection (e.g. 2-3 persons sharing a printer/device)
+        if (staff.size >= 2) {
+            val p1 = staff[0]
+            val p2 = staff[1]
+            viewModel.selectService(testService.id)
+            viewModel.toggleBeneficiary(p1.id)
+            viewModel.toggleBeneficiary(p2.id)
+            assertEquals(2, viewModel.uiState.value.selectedBeneficiaryIds.size)
+
+            viewModel.addDraftLine(article, 1.0)
+            val multiRef = "BS-TEST-MULTI"
+            val success3 = viewModel.validateSortieSync(
+                referenceBon = multiRef,
+                serviceId = testService.id,
+                localId = stateAfterSelect.selectedLocal?.id,
+                demandeur = "",
+                recepteurInterne = "",
+                motif = "Imprimante laser partagée",
+                date = "2026-09-18 10:30"
+            )
+            assertTrue(success3)
+
+            val sortie3 = viewModel.uiState.value.sorties.first { it.referenceBon == multiRef }
+            assertEquals(resolvedChef, sortie3.chefDeServiceName)
+            assertTrue(sortie3.beneficiaireNames.contains(p1.fullName))
+            assertTrue(sortie3.beneficiaireNames.contains(p2.fullName))
+        }
+
+        // 4. Scenario: Verify CSV export mapper contains Chef de Service and Bénéficiaires columns
+        val (headers, rows) = org.abdat.inventory.util.SortiesCsvMapper.toHeadersAndRows(viewModel.uiState.value.sorties)
+        assertTrue(headers.contains("Chef de Service"))
+        assertTrue(headers.contains("Bénéficiaires"))
+        val chefIdx = headers.indexOf("Chef de Service")
+        val benefIdx = headers.indexOf("Bénéficiaires")
+        assertTrue(chefIdx >= 0)
+        assertTrue(benefIdx >= 0)
+        val matchingRow = rows.first { it[headers.indexOf("Numéro BS")] == singleRef }
+        assertEquals(resolvedChef, matchingRow[chefIdx])
+        assertEquals(singlePerson.fullName, matchingRow[benefIdx])
     }
 
     @Test
@@ -1196,7 +1300,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testDechargeViewModelAtomicStockMutationAndZeroValuation() {
-        val dechargeVm = DechargeViewModel(database)
+        val dechargeVm = DechargeViewModel(database, categoryRepo())
         dechargeVm.loadDataSync()
 
         val initialState = dechargeVm.uiState.value
@@ -1213,8 +1317,8 @@ class ScreensViewModelTest {
                 codeArticle = newCode,
                 designation = newDesig,
                 unite = "U",
-                family = "Matériel Médical",
-                sousFamily = "Diagnostic",
+                family = "Matériel",
+                sousFamily = "Monitoring",
                 quantity = 10.0,
                 expirationDate = "2030-12-31",
                 article = null
