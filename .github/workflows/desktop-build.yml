@@ -32,9 +32,8 @@ jobs:
             echo "package_version=1.0.0" >> "$GITHUB_OUTPUT"
           fi
 
-  linux:
-    name: Build Linux installer
-    needs: version
+  test:
+    name: Run JVM Tests
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -46,10 +45,34 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Test and package DEB
-        run: ./gradlew --stacktrace "-PpackageVersion=${{ needs.version.outputs.package_version }}" :shared:jvmTest :desktopApp:packageDeb
+      - name: Run Tests
+        run: ./gradlew --stacktrace :shared:jvmTest
 
-      - name: Upload Linux installer
+  linux:
+    name: Build Linux installers (DEB & RPM)
+    needs:
+      - version
+      - test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Linux packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot rpm binutils
+
+      - name: Package DEB and RPM
+        run: ./gradlew --stacktrace "-PpackageVersion=${{ needs.version.outputs.package_version }}" :desktopApp:packageDeb :desktopApp:packageRpm
+
+      - name: Upload Linux DEB installer
         uses: actions/upload-artifact@v4
         with:
           name: inventairemed-linux-deb
@@ -57,9 +80,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload Linux RPM installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventairemed-linux-rpm
+          path: desktopApp/build/compose/binaries/main/rpm/*.rpm
+          if-no-files-found: error
+          retention-days: 14
+
   windows:
-    name: Build Windows installer
-    needs: version
+    name: Build Windows installers (MSI & EXE)
+    needs:
+      - version
+      - test
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -85,15 +118,23 @@ jobs:
 
           $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Package MSI
+      - name: Package MSI and EXE
         shell: pwsh
-        run: .\gradlew.bat --stacktrace "-PpackageVersion=${{ needs.version.outputs.package_version }}" :desktopApp:packageMsi
+        run: .\gradlew.bat --stacktrace "-PpackageVersion=${{ needs.version.outputs.package_version }}" :desktopApp:packageMsi :desktopApp:packageExe
 
-      - name: Upload Windows installer
+      - name: Upload Windows MSI installer
         uses: actions/upload-artifact@v4
         with:
           name: inventairemed-windows-msi
           path: desktopApp/build/compose/binaries/main/msi/*.msi
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows EXE installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventairemed-windows-exe
+          path: desktopApp/build/compose/binaries/main/exe/*.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -107,17 +148,29 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Linux installer
+      - name: Download Linux DEB installer
         uses: actions/download-artifact@v4
         with:
           name: inventairemed-linux-deb
-          path: release-assets/linux
+          path: release-assets/linux/deb
 
-      - name: Download Windows installer
+      - name: Download Linux RPM installer
+        uses: actions/download-artifact@v4
+        with:
+          name: inventairemed-linux-rpm
+          path: release-assets/linux/rpm
+
+      - name: Download Windows MSI installer
         uses: actions/download-artifact@v4
         with:
           name: inventairemed-windows-msi
-          path: release-assets/windows
+          path: release-assets/windows/msi
+
+      - name: Download Windows EXE installer
+        uses: actions/download-artifact@v4
+        with:
+          name: inventairemed-windows-exe
+          path: release-assets/windows/exe
 
       - name: Create or update release
         env:
@@ -125,7 +178,12 @@ jobs:
           TAG: ${{ github.ref_name }}
         shell: bash
         run: |
-          files=(release-assets/linux/*.deb release-assets/windows/*.msi)
+          files=(
+            release-assets/linux/deb/*.deb
+            release-assets/linux/rpm/*.rpm
+            release-assets/windows/msi/*.msi
+            release-assets/windows/exe/*.exe
+          )
 
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --clobber
