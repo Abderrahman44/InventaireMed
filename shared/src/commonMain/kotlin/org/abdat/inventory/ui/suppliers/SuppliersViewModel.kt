@@ -183,7 +183,7 @@ class SuppliersViewModel(
             val balances = database.appDatabaseQueries.selectConventionBalancesByConventionId(conv.id)
                 .executeAsList()
                 .map {
-                    val price = stockPriceMap[it.designation.lowercase().trim()] ?: 150.0
+                    val price = stockPriceMap[it.designation.lowercase().trim()] ?: 0.0
                     ConventionQuotaBalance(
                         conventionItemId = it.conventionItemId,
                         conventionId = it.conventionId,

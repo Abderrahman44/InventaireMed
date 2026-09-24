@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Trend Line -->
+    <path
+        android:pathData="M4,17 L9,11 L14,14 L20,6"
+        android:strokeColor="#10B981"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <!-- Bars -->
+    <path
+        android:pathData="M5,18 v2 M10,14 v6 M15,16 v4 M20,9 v11"
+        android:strokeColor="#2563EB"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"/>
+</vector>

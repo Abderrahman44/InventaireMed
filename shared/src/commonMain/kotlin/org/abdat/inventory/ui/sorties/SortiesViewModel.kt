@@ -84,8 +84,8 @@ data class SortiesUiState(
     val postIssueAlertsCount: Int = 0,
 
     // Form fields
-    val systemReference: String = "BS-2026-089",
-    val paperStubReference: String = "BSP-4402",
+    val systemReference: String = "",
+    val paperStubReference: String = "",
     val issueDate: String = "",
     val demandeur: String = "",
     val recepteurInterne: String = "",
@@ -162,7 +162,7 @@ class SortiesViewModel(
         _uiState.update { current ->
             current.copy(
                 availableArticles = snapshot.articles,
-                postIssueAlertsCount = if (alerts > 0) alerts else 3
+                postIssueAlertsCount = alerts
             )
         }
     }
@@ -212,7 +212,7 @@ class SortiesViewModel(
                     ?: "Responsable de service"
             }
 
-            val benefIds = sortie.beneficiaire_ids?.split(",")?.mapNotNull { it.trim().toLongOrNull() } ?: emptyList()
+            val benefIds = sortie.beneficiaire_ids.split(",").mapNotNull { it.trim().toLongOrNull() }
             val benefNames = if (benefIds.isNotEmpty()) {
                 benefIds.mapNotNull { personMap[it]?.fullName }.joinToString(", ")
             } else {
@@ -235,7 +235,7 @@ class SortiesViewModel(
             SortieDisplayItem(
                 id = sortie.id,
                 referenceBon = sortie.reference_bon,
-                paperStubReference = "BSP-${(4400 + sortie.id)}",
+                paperStubReference = "BSP-${sortie.id.toString().padStart(3, '0')}",
                 serviceName = serviceName,
                 localName = localName,
                 recipient = recipientDisplay,
@@ -267,11 +267,12 @@ class SortiesViewModel(
             srv.chefName?.takeIf { it.isNotBlank() }
                 ?: staffForService.firstOrNull { it.isChef }?.fullName
                 ?: staffForService.firstOrNull { it.notes.contains("Chef", ignoreCase = true) }?.fullName
-                ?: "Dr. Responsable de Service"
+                ?: ""
         } ?: ""
 
+        val prefix = database.appDatabaseQueries.getMetadata("prefix_sortie").executeAsOneOrNull() ?: "BS-2026-"
         val nextId = (dbSorties.maxOfOrNull { it.id } ?: 0L) + 1L
-        val generatedSystemRef = "BS-2026-${nextId.toString().padStart(3, '0')}"
+        val generatedSystemRef = "$prefix${nextId.toString().padStart(3, '0')}"
 
         val initialDraftLines = _uiState.value.draftLines
         val totalUnits = initialDraftLines.sumOf { it.issueQuantity }
@@ -294,9 +295,9 @@ class SortiesViewModel(
                 totalValuationDzd = totalVal,
                 issueDate = current.issueDate.ifBlank { nowDateTime },
                 systemReference = current.systemReference.ifBlank { generatedSystemRef },
-                todaySortiesCount = (displayItems.size).coerceAtLeast(14),
-                monthlyDistributedDzd = if (totalDistributed > 0.0) totalDistributed else 384500.0,
-                activeServicesCount = if (activeServices > 0) activeServices else 6,
+                todaySortiesCount = displayItems.size,
+                monthlyDistributedDzd = totalDistributed,
+                activeServicesCount = activeServices,
                 isLoading = false
             )
         }
@@ -342,7 +343,7 @@ class SortiesViewModel(
         val chefName = selected.chefName?.takeIf { it.isNotBlank() }
             ?: dbStaff.firstOrNull { it.isChef }?.fullName
             ?: dbStaff.firstOrNull { it.notes.contains("Chef", ignoreCase = true) }?.fullName
-            ?: "Dr. Responsable de Service"
+            ?: ""
 
         _uiState.update { current ->
             current.copy(
@@ -354,7 +355,7 @@ class SortiesViewModel(
                 chefDeServiceName = chefName,
                 demandeur = if (current.demandeur.isBlank() || current.demandeur == current.chefDeServiceName) chefName else current.demandeur,
                 recepteurInterne = "",
-                recipientName = "Chef: $chefName"
+                recipientName = if (chefName.isNotBlank()) "Chef: $chefName" else ""
             )
         }
     }
@@ -605,15 +606,16 @@ class SortiesViewModel(
                 }
             }
 
+            val prefix = database.appDatabaseQueries.getMetadata("prefix_sortie").executeAsOneOrNull() ?: "BS-2026-"
             val nextId = (database.appDatabaseQueries.selectAllSorties().executeAsList().maxOfOrNull { it.id } ?: 0L) + 1L
-            val nextRef = "BS-2026-${nextId.toString().padStart(3, '0')}"
+            val nextRef = "$prefix${nextId.toString().padStart(3, '0')}"
 
             _uiState.update {
                 it.copy(
                     actionSuccessMessage = "Bon de Sortie $referenceBon validé avec succès. Stock décrémenté.",
                     actionErrorMessage = null,
                     systemReference = nextRef,
-                    paperStubReference = "BSP-${(4400 + nextId)}",
+                    paperStubReference = "",
                     issueDate = currentFormattedDateTime(),
                     demandeur = finalChef,
                     recepteurInterne = "",

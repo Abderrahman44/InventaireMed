@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Crate Base -->
+    <path
+        android:pathData="M4,10 h16 v9 a2,2 0 0,1 -2,2 H6 a2,2 0 0,1 -2,-2 V10 z"
+        android:fillColor="#F59E0B"/>
+    <!-- Upward Outbound Arrow -->
+    <path
+        android:pathData="M12,14 V3 M8,7 l4,-4 l4,4"
+        android:strokeColor="#EF4444"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+</vector>

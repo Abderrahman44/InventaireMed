@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- Top Pillar -->
+    <path
+        android:pathData="M216,48 h80 a24,24 0 0,1 24,24 v80 a24,24 0 0,1 -24,24 h-80 a24,24 0 0,1 -24,-24 v-80 a24,24 0 0,1 24,-24 z"
+        android:fillColor="#004AC6"/>
+    <!-- Bottom Pillar -->
+    <path
+        android:pathData="M216,336 h80 a24,24 0 0,1 24,24 v80 a24,24 0 0,1 -24,24 h-80 a24,24 0 0,1 -24,-24 v-80 a24,24 0 0,1 24,-24 z"
+        android:fillColor="#004AC6"/>
+    <!-- Left Arm -->
+    <path
+        android:pathData="M48,192 h80 a28,28 0 0,1 28,28 v72 a28,28 0 0,1 -28,28 h-80 a28,28 0 0,1 -28,-28 v-72 a28,28 0 0,1 28,-28 z"
+        android:fillColor="#004AC6"/>
+    <!-- Right Arm -->
+    <path
+        android:pathData="M336,192 h80 a28,28 0 0,1 28,28 v72 a28,28 0 0,1 -28,28 h-80 a28,28 0 0,1 -28,-28 v-72 a28,28 0 0,1 28,-28 z"
+        android:fillColor="#004AC6"/>
+    <!-- Emerald Core Center -->
+    <path
+        android:pathData="M176,152 h160 a36,36 0 0,1 36,36 v88 a36,36 0 0,1 -36,36 h-160 a36,36 0 0,1 -36,-36 v-88 a36,36 0 0,1 36,-36 z"
+        android:fillColor="#10B981"/>
+    <!-- Inner Cross (White) -->
+    <path
+        android:pathData="M256,188 v88 M212,232 h88"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="22"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+</vector>

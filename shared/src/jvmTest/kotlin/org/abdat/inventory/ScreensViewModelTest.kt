@@ -1352,4 +1352,47 @@ class ScreensViewModelTest {
         assertEquals(0.0, brandNewArticle.unit_price, "Donation article unit_price must strictly be 0.0")
         assertEquals("2030-12-31", brandNewArticle.expiration_date)
     }
+
+    @Test
+    fun testOperationalViewModelsZeroStateOnEmptyDatabase() {
+        val emptyDriver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        emptyDriver.execute(null, "PRAGMA foreign_keys = ON;", 0)
+        AppDatabase.Schema.create(emptyDriver)
+        val emptyDb = AppDatabase(emptyDriver)
+        ensureCategoryTaxonomy(emptyDb)
+        val emptyStockRepo = StockRepository(emptyDb, Dispatchers.IO)
+
+        // 1. SortiesViewModel on empty DB
+        val sortiesVm = SortiesViewModel(emptyDb, emptyStockRepo)
+        val sortiesState = sortiesVm.uiState.value
+        assertEquals(0, sortiesState.sorties.size)
+        assertEquals(0, sortiesState.todaySortiesCount)
+        assertEquals(0.0, sortiesState.monthlyDistributedDzd)
+        assertEquals(0, sortiesState.activeServicesCount)
+        assertEquals(0, sortiesState.postIssueAlertsCount)
+        assertEquals("BS-2026-001", sortiesState.systemReference)
+        assertEquals("", sortiesState.paperStubReference)
+
+        // 2. DeliveriesViewModel on empty DB
+        val deliveriesVm = DeliveriesViewModel(emptyDb)
+        val deliveriesState = deliveriesVm.uiState.value
+        assertEquals(0, deliveriesState.deliveries.size)
+        assertEquals(0, deliveriesState.plannedDeliveriesCount)
+        assertEquals(0, deliveriesState.conformingDeliveriesCount)
+        assertEquals(0, deliveriesState.inControlDeliveriesCount)
+        assertEquals(0.0, deliveriesState.monthlyVolumeDzd)
+        assertEquals(0, deliveriesState.pendingReconciliationCount)
+        assertEquals("", deliveriesState.paperBlReference)
+
+        // 3. OrdersViewModel on empty DB
+        val ordersVm = OrdersViewModel(emptyDb)
+        val ordersState = ordersVm.uiState.value
+        assertEquals(0, ordersState.orders.size)
+        assertEquals(0, ordersState.activeOrdersCount)
+        assertEquals(0.0, ordersState.totalCommittedDzd)
+        assertEquals(0, ordersState.pendingDeliveriesCount)
+        assertEquals(0, ordersState.strainedConventionsCount)
+
+        emptyDriver.close()
+    }
 }

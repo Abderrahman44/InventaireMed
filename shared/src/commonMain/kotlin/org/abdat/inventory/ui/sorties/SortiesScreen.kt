@@ -385,7 +385,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                 MetricCard(
                     title = "Services Demandeurs",
                     value = "${state.activeServicesCount} Actifs",
-                    subtitle = "Bloc, Bioméd., Chirurgie",
+                    subtitle = "Centres de coût destinataires",
                     icon = Icons.Default.Business,
                     accentColor = Color(0xFF6366F1),
                     modifier = Modifier.weight(1f)
@@ -502,7 +502,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                             CustomInputField(
                                 value = state.paperStubReference,
                                 onValueChange = { viewModel.updatePaperStubReference(it) },
-                                placeholder = "Ex: BSP-4402"
+                                placeholder = "Ex: BSP-001"
                             )
                         }
 
