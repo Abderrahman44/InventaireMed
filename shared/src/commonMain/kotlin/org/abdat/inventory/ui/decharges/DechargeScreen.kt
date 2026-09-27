@@ -60,6 +60,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import org.abdat.inventory.domain.model.CategoryTaxonomy
 import org.abdat.inventory.ui.components.ArticleCategoryPicker
+import org.abdat.inventory.ui.components.EmptyState
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.ui.components.rememberArticleCategorySelection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -122,7 +124,7 @@ fun DechargeScreen(
                             color = AppTheme.colors.textPrimary
                         )
                         Text(
-                            text = "Réception de subventions étatiques, dons et legs sans incidence budgétaire (SRS-V2)",
+                            text = "Réception de subventions étatiques, dons et legs sans incidence budgétaire",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.colors.textSecondary
                         )
@@ -175,7 +177,7 @@ fun DechargeScreen(
             )
             MetricCard(
                 title = "Impact Budgétaire DZD",
-                value = "0.00 DZD",
+                value = formatDzd(0.0),
                 subtitle = "Strictement neutre",
                 icon = Icons.Default.Info,
                 accentColor = AppTheme.colors.statusSuccess,
@@ -211,7 +213,7 @@ fun DechargeScreen(
                     }
                 } else if (state.decharges.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Aucun papier de décharge enregistré", color = AppTheme.colors.textSecondary)
+                        EmptyState(message = "Aucun papier de décharge enregistré")
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -236,7 +238,7 @@ fun DechargeScreen(
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.primary
                                         )
-                                        StatusChip(type = StatusType.SUCCESS, text = "0.00 DZD")
+                                        StatusChip(type = StatusType.SUCCESS, text = formatDzd(0.0))
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
@@ -340,7 +342,7 @@ fun DechargeScreen(
                                                 color = AppTheme.colors.statusSuccess
                                             )
                                             Text(
-                                                text = "0.00 DZD",
+                                                text = formatDzd(0.0),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = AppTheme.colors.textSecondary
                                             )
@@ -475,7 +477,7 @@ private fun CreateDechargeDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = "Valorisation financière strictement nulle : 0.00 DZD (Don / Dotation non facturée)",
+                            text = "Valorisation financière strictement nulle : ${formatDzd(0.0)} (Don / Dotation non facturée)",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -674,7 +676,7 @@ private fun CreateDechargeDialog(
                                     )
                                     val expInfo = if (!line.expirationDate.isNullOrBlank()) " • Exp: ${line.expirationDate}" else ""
                                     Text(
-                                        text = "Prix: 0.00 DZD (Don)$expInfo",
+                                        text = "Prix: ${formatDzd(0.0)} (Don)$expInfo",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = AppTheme.colors.textSecondary
                                     )

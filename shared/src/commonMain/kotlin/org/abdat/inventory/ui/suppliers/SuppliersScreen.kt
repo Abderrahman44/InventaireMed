@@ -73,6 +73,8 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.CsvExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
@@ -306,17 +308,14 @@ fun SuppliersScreen(
                                 .padding(24.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    "Aucun fournisseur trouvé",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                TextButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                                    Text("Réinitialiser les filtres")
+                            EmptyState(
+                                message = "Aucun fournisseur trouvé",
+                                action = {
+                                    TextButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                                        Text("Réinitialiser les filtres")
+                                    }
                                 }
-                            }
+                            )
                         }
                     } else {
                         LazyColumn(
@@ -402,7 +401,7 @@ fun SuppliersScreen(
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
-                                        "Plafond: ${totalCeilingDzd.toLong()} DZD",
+                                        "Plafond: ${formatDzd(totalCeilingDzd)}",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -680,7 +679,7 @@ private fun ConventionsTabView(
 ) {
     if (conventions.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Aucune convention-cadre enregistrée pour ce fournisseur.", color = AppTheme.colors.textSecondary)
+            EmptyState(message = "Aucune convention-cadre enregistrée pour ce fournisseur.")
         }
     } else {
         LazyColumn(
@@ -712,7 +711,7 @@ private fun ConventionsTabView(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Plafond global: ${conv.totalMontant.toLong()} DZD • ${convBalances.size} article(s) • TVA: ${if (conv.tvaRate > 0) "${conv.tvaRate}%" else "0% (Exonéré)"}",
+                                    text = "Plafond global: ${formatDzd(conv.totalMontant)} • ${convBalances.size} article(s) • TVA: ${if (conv.tvaRate > 0) "${conv.tvaRate}%" else "0% (Exonéré)"}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
@@ -806,7 +805,7 @@ private fun ReferencedArticlesTabView(
 
     if (allItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Aucun article conventionné enregistré.", color = AppTheme.colors.textSecondary)
+            EmptyState(message = "Aucun article conventionné enregistré.")
         }
     } else {
         val tableScrollState = rememberScrollState()
@@ -838,7 +837,7 @@ private fun ReferencedArticlesTabView(
                 ) {
                     Text(item.designation, modifier = Modifier.width(180.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = AppTheme.colors.textPrimary)
                     Text(item.unite, modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text("${item.unitPrice.toLong()} DZD", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(formatDzd(item.unitPrice), modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text("${item.agreedQuantity.toLong()}", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = AppTheme.colors.textPrimary)
                     Text("${item.orderedQuantity.toLong()}", modifier = Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(
@@ -858,7 +857,7 @@ private fun ReferencedArticlesTabView(
 private fun HistoryTabView(historyItems: List<SupplierHistoryItem>) {
     if (historyItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Aucun mouvement (BC ou BL) répertorié pour ce fournisseur.", color = AppTheme.colors.textSecondary)
+            EmptyState(message = "Aucun mouvement (BC ou BL) répertorié pour ce fournisseur.")
         }
     } else {
         val tableScrollState = rememberScrollState()
@@ -894,7 +893,7 @@ private fun HistoryTabView(historyItems: List<SupplierHistoryItem>) {
                     Text(item.reference, modifier = Modifier.width(180.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
                     Text(item.type, modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(item.date, modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text("${item.amountDzd.toLong()} DZD", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textPrimary)
+                    Text(formatDzd(item.amountDzd), modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textPrimary)
                     Box(modifier = Modifier.width(110.dp)) {
                         AppBadge(
                             text = item.status,

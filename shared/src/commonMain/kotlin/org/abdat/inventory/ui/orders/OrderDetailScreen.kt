@@ -50,7 +50,9 @@ import kotlinx.collections.immutable.ImmutableList
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 
 @Composable
 fun OrderDetailKpiStrip(
@@ -66,8 +68,8 @@ fun OrderDetailKpiStrip(
     ) {
         MetricCard(
             title = "Montant Engagé (TTC)",
-            value = "${data.displayItem.totalAmountDzd.toLong()} DZD",
-            subtitle = if (data.displayItem.tvaRate > 0) "HT: ${data.displayItem.subtotalHtDzd.toLong()} DZD (TVA ${data.displayItem.tvaRate}%)" else "Valeur totale BC (Exonéré)",
+            value = formatDzd(data.displayItem.totalAmountDzd),
+            subtitle = if (data.displayItem.tvaRate > 0) "HT: ${formatDzd(data.displayItem.subtotalHtDzd)} (TVA ${data.displayItem.tvaRate}%)" else "Valeur totale BC (Exonéré)",
             icon = Icons.Default.Payments,
             accentColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f)
@@ -186,20 +188,10 @@ fun OrderDetailsTable(
                         .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(40.dp),
-                            tint = AppTheme.colors.textSecondary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Aucun article correspondant trouvé",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTheme.colors.textSecondary
-                        )
-                    }
+                    EmptyState(
+                        message = "Aucun article correspondant trouvé",
+                        icon = Icons.Default.Search
+                    )
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -230,7 +222,7 @@ fun OrderDetailsTable(
                                 color = AppTheme.colors.textSecondary
                             )
                             Text(
-                                text = "${line.item.unitPrice.toLong()} DZD",
+                                text = formatDzd(line.item.unitPrice),
                                 modifier = Modifier.width(140.dp),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = AppTheme.colors.textPrimary
@@ -327,18 +319,7 @@ fun OrderLinkedDeliveriesCard(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (linkedDeliveries.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Aucune livraison enregistrée pour cette commande à ce jour.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTheme.colors.textSecondary
-                    )
-                }
+                EmptyState(message = "Aucune livraison enregistrée pour cette commande à ce jour.")
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

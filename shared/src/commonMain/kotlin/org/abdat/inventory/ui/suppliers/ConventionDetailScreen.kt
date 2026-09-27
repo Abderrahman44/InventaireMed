@@ -68,7 +68,9 @@ import org.abdat.inventory.domain.model.Fournisseur
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.CsvExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
@@ -177,7 +179,7 @@ fun ConventionDetailScreen(
                                 )
                             }
                             Text(
-                                text = "Fournisseur : ${supplier.fullName} (FRN-${supplier.id.toString().padStart(4, '0')}) • Signée le : ${convention.date} • Plafond : ${convention.totalMontant.toLong()} DZD • TVA : ${convention.tvaRate}%",
+                                text = "Fournisseur : ${supplier.fullName} (FRN-${supplier.id.toString().padStart(4, '0')}) • Signée le : ${convention.date} • Plafond : ${formatDzd(convention.totalMontant)} • TVA : ${convention.tvaRate}%",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.colors.textSecondary
                             )
@@ -378,11 +380,7 @@ fun ConventionDetailScreen(
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "Aucun article trouvé dans cette convention.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        EmptyState(message = "Aucun article trouvé dans cette convention.")
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -420,7 +418,7 @@ fun ConventionDetailScreen(
                                 )
 
                                 Text(
-                                    "${item.unitPrice.toLong()} DZD",
+                                    formatDzd(item.unitPrice),
                                     modifier = Modifier.width(100.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary

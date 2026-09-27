@@ -68,7 +68,9 @@ import org.abdat.inventory.domain.model.PackagingUnit
 import org.abdat.inventory.domain.model.StockArticle
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.ArticleCategoryPicker
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.ui.components.rememberArticleCategorySelection
 
 @Composable
@@ -226,14 +228,14 @@ fun ArticleDetailScreen(
             )
             MetricCard(
                 title = strings.unitPrice,
-                value = "${article.unitPrice} DZD",
+                value = formatDzd(article.unitPrice),
                 icon = Icons.Default.Payments,
                 accentColor = AppTheme.colors.statusSuccess,
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
                 title = strings.totalValue,
-                value = "${article.quantity * article.unitPrice} DZD",
+                value = formatDzd(article.quantity * article.unitPrice),
                 icon = Icons.Default.Payments,
                 accentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
@@ -310,7 +312,7 @@ fun ArticleDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Journal d'Audit des Modifications (SRS-V2)",
+                            text = "Journal d'Audit des Modifications",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = AppTheme.colors.textPrimary
                         )
@@ -333,11 +335,7 @@ fun ArticleDetailScreen(
 
                     if (state.auditLogs.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "Aucune modification enregistrée pour cet article.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppTheme.colors.textSecondary
-                            )
+                            EmptyState(message = "Aucune modification enregistrée pour cet article.")
                         }
                     } else {
                         LazyColumn(
@@ -567,7 +565,7 @@ private fun ArticleEditWithReasonDialog(
                 ) {
                     Column {
                         Text(
-                            text = "* Motif obligatoire pour l'audit trail (SRS-V2) :",
+                            text = "* Motif obligatoire pour l'audit trail :",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = AppTheme.colors.onStatusWarning
                         )

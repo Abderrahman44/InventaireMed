@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import org.abdat.inventory.theme.AppTheme
+import org.abdat.inventory.ui.components.formatDzd
 
 @Composable
 fun ConsumptionDetailDialog(
@@ -294,14 +295,14 @@ fun ConsumptionDetailDialog(
                                 color = AppTheme.colors.textPrimary
                             )
                             Text(
-                                text = "${formatAmount(item.unitPrice)} DZD",
+                                text = formatDzd(item.unitPrice),
                                 modifier = Modifier.width(110.dp),
                                 textAlign = TextAlign.End,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.colors.textSecondary
                             )
                             Text(
-                                text = "${formatAmount(item.totalCost)} DZD",
+                                text = formatDzd(item.totalCost),
                                 modifier = Modifier.width(130.dp),
                                 textAlign = TextAlign.End,
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
@@ -330,7 +331,7 @@ fun ConsumptionDetailDialog(
                         color = AppTheme.colors.textPrimary
                     )
                     Text(
-                        text = "${formatAmount(record.totalVoucherCost)} DZD",
+                        text = formatDzd(record.totalVoucherCost),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -374,11 +375,3 @@ private fun DetailMetaItem(
     }
 }
 
-private fun formatAmount(amount: Double): String {
-    val integerPart = amount.toLong()
-    return integerPart.toString()
-        .reversed()
-        .chunked(3)
-        .joinToString(" ")
-        .reversed()
-}

@@ -90,6 +90,8 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppDateTimePickerField
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
+import org.abdat.inventory.ui.components.formatDzd
 
 @Composable
 fun DeliveriesScreen(viewModel: DeliveriesViewModel) {
@@ -398,7 +400,7 @@ private fun DeliveryKpiStrip(state: DeliveriesUiState) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = formatDzd(state.monthlyVolumeDzd),
+                        text = formatDzdNumber(state.monthlyVolumeDzd),
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold
@@ -1169,7 +1171,7 @@ private fun DeliveryReconciliationTable(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = formatDzd(state.totalCalculatedDzd),
+                            text = formatDzdNumber(state.totalCalculatedDzd),
                             style = MaterialTheme.typography.headlineSmall.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold
@@ -1379,18 +1381,7 @@ private fun DeliveryHistoryCard(
 
                 val deliveriesList = state.filteredDeliveries
                 if (deliveriesList.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Aucune entrée enregistrée dans le registre.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTheme.colors.textSecondary
-                        )
-                    }
+                    EmptyState(message = "Aucune entrée enregistrée dans le registre.")
                 } else {
                     deliveriesList.forEachIndexed { index, item ->
                         Row(
@@ -1449,7 +1440,7 @@ private fun DeliveryHistoryCard(
                                 modifier = Modifier.weight(1.1f)
                             )
                             Text(
-                                text = "${formatDzd(item.totalAmountDzd)} DZD",
+                                text = formatDzd(item.totalAmountDzd),
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold
@@ -1591,7 +1582,7 @@ private fun DeliveryDetailDialog(
                     DetailRow(label = "Date de Réception :", value = delivery.dateLivraison)
                     DetailRow(label = "Destination Stock :", value = delivery.destinationStock)
                     DetailRow(label = "Nombre d'Articles :", value = "${delivery.itemsCount} références")
-                    DetailRow(label = "Montant Total Valorisé :", value = "${formatDzd(delivery.totalAmountDzd)} DZD")
+                    DetailRow(label = "Montant Total Valorisé :", value = formatDzd(delivery.totalAmountDzd))
                     DetailRow(label = "Statut Validation :", value = delivery.statusLabel)
                 }
 
@@ -1801,12 +1792,8 @@ private fun DiscrepancyBadge(line: DeliveryVerificationLine) {
     }
 }
 
-private fun formatDzd(amount: Double): String {
-    val integerPart = amount.toLong()
-    val formatted = integerPart.toString()
-        .reversed()
-        .chunked(3)
-        .joinToString(" ")
-        .reversed()
-    return "$formatted,00"
-}
+/**
+ * Grouped digits only (no ` DZD` suffix), for the hero stat displays that
+ * render their own separate "DZD" unit label next to the number.
+ */
+private fun formatDzdNumber(amount: Double): String = formatDzd(amount).removeSuffix(" DZD")

@@ -77,7 +77,9 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.ui.suppliers.ConventionQuotaBalance
 import org.abdat.inventory.util.CsvExporter
 import org.abdat.inventory.util.FileTypeFilter
@@ -237,7 +239,7 @@ fun OrdersScreen(
             )
             MetricCard(
                 title = "Montant Engagé (DZD)",
-                value = "${state.totalCommittedDzd.toLong()} DZD",
+                value = formatDzd(state.totalCommittedDzd),
                 subtitle = "Total engagé validé",
                 icon = Icons.Default.Payments,
                 accentColor = MaterialTheme.colorScheme.primary,
@@ -331,26 +333,18 @@ fun OrdersScreen(
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp).padding(bottom = 16.dp),
-                                tint = AppTheme.colors.textSecondary
-                            )
-                            Text(
-                                text = "Aucun bon de commande trouvé",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppTheme.colors.textSecondary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = { 
-                                viewModel.onSearchQueryChange("")
-                                viewModel.onFilterChange(OrderStatusFilter.ALL)
-                            }) {
-                                Text("Réinitialiser les filtres")
+                        EmptyState(
+                            message = "Aucun bon de commande trouvé",
+                            icon = Icons.Default.Search,
+                            action = {
+                                TextButton(onClick = {
+                                    viewModel.onSearchQueryChange("")
+                                    viewModel.onFilterChange(OrderStatusFilter.ALL)
+                                }) {
+                                    Text("Réinitialiser les filtres")
+                                }
                             }
-                        }
+                        )
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -400,13 +394,13 @@ fun OrdersScreen(
                                 )
                                 Column(modifier = Modifier.width(160.dp)) {
                                     Text(
-                                        text = "${item.totalAmountDzd.toLong()} DZD",
+                                        text = formatDzd(item.totalAmountDzd),
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = AppTheme.colors.textPrimary
                                     )
                                     if (item.tvaRate > 0) {
                                         Text(
-                                            text = "HT: ${item.subtotalHtDzd.toLong()} DZD (${item.tvaRate}%)",
+                                            text = "HT: ${formatDzd(item.subtotalHtDzd)} (${item.tvaRate}%)",
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                             color = AppTheme.colors.textSecondary
                                         )
@@ -721,7 +715,7 @@ private fun NewOrderDialog(
                         onExpandedChange = { expandedConventionDropdown = it }
                     ) {
                         OutlinedTextField(
-                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - TVA ${currentConvention.tvaRate}% - Plafond ${currentConvention.totalMontant.toLong()} DZD" else "Sélectionner Convention",
+                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - TVA ${currentConvention.tvaRate}% - Plafond ${formatDzd(currentConvention.totalMontant)}" else "Sélectionner Convention",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("2. Convention-Cadre Active") },
@@ -734,7 +728,7 @@ private fun NewOrderDialog(
                         ) {
                             conventions.forEach { conv ->
                                 DropdownMenuItem(
-                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - TVA ${conv.tvaRate}% - Plafond: ${conv.totalMontant.toLong()} DZD") },
+                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - TVA ${conv.tvaRate}% - Plafond: ${formatDzd(conv.totalMontant)}") },
                                     onClick = {
                                         onConventionChange(conv.id)
                                         selectedArticle = null
@@ -885,7 +879,7 @@ private fun NewOrderDialog(
                                                 }
                                             }
                                             Text(
-                                                "Reste: ${article.remainingQuantity.toLong()} / ${article.agreedQuantity.toLong()} ${article.unite} • Prix: ${article.unitPrice.toLong()} DZD",
+                                                "Reste: ${article.remainingQuantity.toLong()} / ${article.agreedQuantity.toLong()} ${article.unite} • Prix: ${formatDzd(article.unitPrice)}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = if (article.remainingQuantity <= article.minQuantity) AppTheme.colors.statusUrgent else AppTheme.colors.textSecondary
                                             )
@@ -917,7 +911,7 @@ private fun NewOrderDialog(
                                     color = if (selectedArticle!!.remainingQuantity <= 0) AppTheme.colors.statusUrgent else AppTheme.colors.statusSuccess
                                 )
                                 Text(
-                                    text = "Prix: ${selectedArticle!!.unitPrice.toLong()} DZD / ${selectedArticle!!.unite}",
+                                    text = "Prix: ${formatDzd(selectedArticle!!.unitPrice)} / ${selectedArticle!!.unite}",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -1012,10 +1006,10 @@ private fun NewOrderDialog(
                                 ) {
                                     Column(modifier = Modifier.weight(2f)) {
                                         Text(item.designation, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
-                                        Text("${item.quantity.toLong()} ${item.unite} × ${item.unitPrice.toLong()} DZD", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
+                                        Text("${item.quantity.toLong()} ${item.unite} × ${formatDzd(item.unitPrice)}", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
                                     }
                                     Text(
-                                        "${item.subtotal.toLong()} DZD",
+                                        formatDzd(item.subtotal),
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -1058,7 +1052,7 @@ private fun NewOrderDialog(
                                 color = AppTheme.colors.textSecondary
                             )
                             Text(
-                                "${subtotalHt.toLong()} DZD",
+                                formatDzd(subtotalHt),
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                 color = AppTheme.colors.textPrimary
                             )
@@ -1073,7 +1067,7 @@ private fun NewOrderDialog(
                                 color = AppTheme.colors.textSecondary
                             )
                             Text(
-                                "${tvaAmount.toLong()} DZD",
+                                formatDzd(tvaAmount),
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                 color = AppTheme.colors.textPrimary
                             )
@@ -1093,7 +1087,7 @@ private fun NewOrderDialog(
                                 color = AppTheme.colors.textPrimary
                             )
                             Text(
-                                "${totalTtc.toLong()} DZD",
+                                formatDzd(totalTtc),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -1112,7 +1106,7 @@ private fun NewOrderDialog(
                 },
                 enabled = ref.isNotBlank() && currentSupplier != null && draftItems.isNotEmpty()
             ) {
-                Text("Émettre Bon de Commande (${draftItems.size} art. - ${totalTtc.toLong()} DZD TTC)")
+                Text("Émettre Bon de Commande (${draftItems.size} art. - ${formatDzd(totalTtc)} TTC)")
             }
         },
         dismissButton = {

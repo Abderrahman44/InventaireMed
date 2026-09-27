@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
@@ -676,14 +677,14 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
                                     color = AppTheme.colors.textPrimary
                                 )
                                 Text(
-                                    text = "${formatDzd(item.unitPrice)} DZD",
+                                    text = formatDzd(item.unitPrice),
                                     modifier = Modifier.width(110.dp),
                                     textAlign = TextAlign.End,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
                                 Text(
-                                    text = "${formatDzd(item.totalValue)} DZD",
+                                    text = formatDzd(item.totalValue),
                                     modifier = Modifier.width(130.dp),
                                     textAlign = TextAlign.End,
                                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
@@ -763,7 +764,7 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
                             color = AppTheme.colors.textSecondary
                         )
                         Text(
-                            text = "${formatDzd(state.totalFinancialValueDzd)} DZD",
+                            text = formatDzd(state.totalFinancialValueDzd),
                             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -782,11 +783,3 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
     }
 }
 
-private fun formatDzd(amount: Double): String {
-    val integerPart = amount.toLong()
-    return integerPart.toString()
-        .reversed()
-        .chunked(3)
-        .joinToString(" ")
-        .reversed()
-}

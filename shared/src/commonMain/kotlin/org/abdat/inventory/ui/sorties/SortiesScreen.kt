@@ -93,7 +93,9 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppDateTimePickerField
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.CsvExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.SortiesCsvMapper
@@ -375,7 +377,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
 
                 MetricCard(
                     title = "Valeur Distribuée",
-                    value = "${state.monthlyDistributedDzd.toInt()} DZD",
+                    value = formatDzd(state.monthlyDistributedDzd),
                     subtitle = "Imputation ce mois",
                     icon = Icons.Default.Payments,
                     accentColor = MaterialTheme.colorScheme.primary,
@@ -708,11 +710,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Aucun article dans ce bon. Cliquez sur '+ Ajouter un Article' pour sélectionner des produits.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = AppTheme.colors.textSecondary
-                                )
+                                EmptyState(message = "Aucun article dans ce bon. Cliquez sur '+ Ajouter un Article' pour sélectionner des produits.")
                             }
                         } else {
                             // Table Header
@@ -817,7 +815,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                         color = AppTheme.colors.textSecondary
                                     )
                                     Text(
-                                        text = "${state.totalValuationDzd.toInt()} DZD",
+                                        text = formatDzd(state.totalValuationDzd),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                         color = AppTheme.colors.statusSuccess
                                     )
@@ -974,18 +972,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                     }
 
                     if (state.filteredSorties.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Aucun bon de sortie enregistré.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppTheme.colors.textSecondary
-                            )
-                        }
+                        EmptyState(message = "Aucun bon de sortie enregistré.")
                     } else {
                         state.filteredSorties.forEach { item ->
                             Row(
@@ -1066,7 +1053,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                 )
 
                                 Text(
-                                    text = "${item.totalAmountDzd.toInt()} DZD",
+                                    text = formatDzd(item.totalAmountDzd),
                                     modifier = Modifier.weight(1.2f),
                                     textAlign = TextAlign.End,
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
@@ -1861,7 +1848,7 @@ private fun AddArticleDialog(
                                     color = AppTheme.colors.textPrimary
                                 )
                                 Text(
-                                    text = "${art.codeArticle} • ${art.family} • ${art.unitPrice.toInt()} DZD",
+                                    text = "${art.codeArticle} • ${art.family} • ${formatDzd(art.unitPrice)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AppTheme.colors.textSecondary
                                 )
@@ -1980,7 +1967,7 @@ private fun SortieDetailDialog(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Valorisation Globale :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text("${item.totalAmountDzd.toInt()} DZD", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.statusSuccess)
+                    Text(formatDzd(item.totalAmountDzd), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.statusSuccess)
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

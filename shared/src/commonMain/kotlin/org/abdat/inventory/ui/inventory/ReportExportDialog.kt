@@ -137,7 +137,7 @@ fun ReportExportDialog(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(imageVector = Icons.Default.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
-                    text = "Génération de Rapport & Impression Avancée (SRS-V2)",
+                    text = "Génération de Rapport & Impression Avancée",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }

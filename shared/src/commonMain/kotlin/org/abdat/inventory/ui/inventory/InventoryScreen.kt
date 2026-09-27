@@ -74,7 +74,9 @@ import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
 import org.abdat.inventory.ui.components.ArticleCategoryPicker
 import org.abdat.inventory.ui.components.rememberArticleCategorySelection
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.koin.compose.koinInject
 
 @Composable
@@ -285,27 +287,17 @@ fun InventoryScreen(
                     modifier = Modifier.fillMaxSize().padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = AppTheme.colors.textSecondary.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = "Aucun article ne correspond à votre recherche",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = AppTheme.colors.textPrimary
-                        )
-                        Text(
-                            text = "Modifiez vos filtres de statut ou de famille pour élargir les résultats",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.textSecondary
-                        )
-                    }
+                    EmptyState(
+                        message = "Aucun article ne correspond à votre recherche",
+                        icon = Icons.Default.Search,
+                        action = {
+                            Text(
+                                text = "Modifiez vos filtres de statut ou de famille pour élargir les résultats",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                        }
+                    )
                 }
             } else {
                 val tableScrollState = rememberScrollState()
@@ -332,7 +324,7 @@ fun InventoryScreen(
                             Text("Prix Unitaire", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                             Text("Valeur Totale", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                             Text("Statut", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
-                            Text("Actions (SRS-V2)", modifier = Modifier.width(90.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                            Text("Actions", modifier = Modifier.width(90.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -681,9 +673,4 @@ private fun AddEditArticleDialog(
             }
         }
     )
-}
-
-private fun formatDzd(amount: Double): String {
-    val rounded = amount.toLong()
-    return "$rounded DZD"
 }
