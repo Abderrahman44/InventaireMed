@@ -72,8 +72,8 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
-import org.abdat.inventory.ui.components.ArticleCategoryPicker
-import org.abdat.inventory.ui.components.rememberArticleCategorySelection
+import org.abdat.inventory.ui.components.ArticleFormFields
+import org.abdat.inventory.ui.components.rememberArticleFormState
 import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
 import org.abdat.inventory.ui.components.formatDzd
@@ -514,26 +514,11 @@ private fun AddEditArticleDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, String, Double, Double, String, String, String?, String) -> Unit
 ) {
-    var code by remember { mutableStateOf(article?.codeArticle ?: "") }
-    var barcode by remember { mutableStateOf(article?.additionalReferenceId ?: "") }
-    var designation by remember { mutableStateOf(article?.designation ?: "") }
-    var unite by remember { mutableStateOf(article?.uniteQuantite ?: "BOITE") }
-    // No default category: creation starts empty; editing preselects only what still resolves.
-    val categorySelection = rememberArticleCategorySelection(
-        family = article?.family ?: "",
-        sousFamily = article?.sousFamily ?: "",
-        taxonomy = taxonomy
-    )
-    var quantityText by remember { mutableStateOf(article?.quantity?.toString() ?: "0") }
-    var priceText by remember { mutableStateOf(article?.unitPrice?.toString() ?: "0") }
-    var expirationDate by remember { mutableStateOf(article?.expirationDate ?: "") }
+    val form = rememberArticleFormState(article, taxonomy)
     var date by remember { mutableStateOf(article?.date ?: "2026-09-09") }
     var reason by remember { mutableStateOf("") }
 
-    var codeError by remember { mutableStateOf(false) }
-    var designationError by remember { mutableStateOf(false) }
     var reasonError by remember { mutableStateOf(false) }
-    var showCategoryErrors by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -550,68 +535,7 @@ private fun AddEditArticleDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it; codeError = false },
-                        label = { Text("Code Article (ex: ART-101)") },
-                        isError = codeError,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = barcode,
-                        onValueChange = { barcode = it },
-                        label = { Text("Réf. Barcode / Fabriquant") },
-                        modifier = Modifier.weight(1.2f)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = designation,
-                    onValueChange = { designation = it; designationError = false },
-                    label = { Text("Désignation de l'Article") },
-                    isError = designationError,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                ArticleCategoryPicker(
-                    taxonomy = taxonomy,
-                    selection = categorySelection,
-                    showErrors = showCategoryErrors,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = unite,
-                        onValueChange = { unite = it },
-                        label = { Text("Unité (Pièce, Boîte, Rame...)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = expirationDate,
-                        onValueChange = { expirationDate = it },
-                        label = { Text("Péremption (YYYY-MM-DD)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = quantityText,
-                        onValueChange = { quantityText = it },
-                        label = { Text("Quantité Stock") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = priceText,
-                        onValueChange = { priceText = it },
-                        label = { Text("Prix Unitaire (DZD)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                ArticleFormFields(state = form, taxonomy = taxonomy)
 
                 // If modifying existing article, require justification reason for audit log
                 if (article != null) {
@@ -637,29 +561,23 @@ private fun AddEditArticleDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    codeError = code.isBlank()
-                    designationError = designation.isBlank()
                     if (article != null && reason.isBlank()) {
                         reasonError = true
                     }
-                    val categoryLabels = categorySelection.resolvedLabels(taxonomy)
-                    showCategoryErrors = categoryLabels == null
-                    if (codeError || designationError || reasonError || categoryLabels == null) return@Button
+                    val values = form.validate(taxonomy)
+                    if (values == null || reasonError) return@Button
 
-                    val qty = quantityText.toDoubleOrNull() ?: 0.0
-                    val price = priceText.toDoubleOrNull() ?: 0.0
-                    val exp = expirationDate.ifBlank { null }
                     onSave(
-                        code.trim(),
-                        designation.trim(),
-                        unite.trim(),
-                        categoryLabels.first,
-                        categoryLabels.second,
-                        qty,
-                        price,
+                        values.code,
+                        values.designation,
+                        values.unite,
+                        values.family,
+                        values.sousFamily,
+                        values.quantity,
+                        values.unitPrice,
                         date,
-                        barcode.trim(),
-                        exp,
+                        values.barcode,
+                        values.expirationDate,
                         reason.trim()
                     )
                 }

@@ -130,8 +130,11 @@ class SupplierConventionExportTest {
 
             val lines = tempFile.readLines()
             assertTrue(lines.isNotEmpty())
-            assertTrue(lines[0].contains("Numéro Convention"))
-            assertTrue(lines[1].contains("Conv N° 2026001"))
+            assertTrue(lines.size >= 7)
+            assertTrue(lines[0].contains("Établissement Public Hospitalier"))
+            assertTrue(lines[1].contains("El Attaf, Aïn Defla"))
+            assertTrue(lines[5].contains("Numéro Convention"))
+            assertTrue(lines[6].contains("Conv N° 2026001"))
         } finally {
             tempFile.delete()
         }

@@ -16,6 +16,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.abdat.inventory.data.mapper.toDomain
 import org.abdat.inventory.data.repository.CategoryRepository
+import org.abdat.inventory.data.repository.ConfigRepository
 import org.abdat.inventory.database.AppDatabase
 import org.abdat.inventory.database.BackupValidationResult
 import org.abdat.inventory.database.DatabaseBackupService
@@ -24,6 +25,7 @@ import org.abdat.inventory.domain.model.CATEGORY_SOUS_FAMILY
 import org.abdat.inventory.domain.model.CategoryCodes
 import org.abdat.inventory.domain.model.CategoryTaxonomy
 import org.abdat.inventory.domain.model.DynamicConfigItem
+import org.abdat.inventory.domain.model.InstitutionalHeader
 import org.abdat.inventory.domain.model.UserProfile
 import org.abdat.inventory.domain.model.categoryLabelsMatch
 import org.abdat.inventory.util.FileTypeFilter
@@ -34,6 +36,7 @@ enum class ConfigTab(val label: String) {
     TYPES("Listes & Unités"),
     THRESHOLDS("Seuils d'Alerte"),
     PREFIXES("Numérotation & Préfixes"),
+    HEADER("En-tête Documents"),
     PROFILE("Profil Utilisateur"),
     BACKUP("Sauvegarde & Données")
 }
@@ -50,6 +53,7 @@ data class DynamicConfigUiState(
     val prefixSortie: String = "BS-2026-",
     val prefixDecharge: String = "DCH-2026-",
     val userProfile: UserProfile = UserProfile(),
+    val institutionalHeader: InstitutionalHeader = InstitutionalHeader.DEFAULT,
 
     // Backup & Restore
     val lastBackupDate: String? = null,
@@ -76,7 +80,8 @@ data class DynamicConfigUiState(
 class DynamicConfigViewModel(
     private val database: AppDatabase,
     private val categoryRepository: CategoryRepository,
-    private val backupService: DatabaseBackupService? = null
+    private val backupService: DatabaseBackupService? = null,
+    private val configRepository: ConfigRepository = ConfigRepository(database)
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DynamicConfigUiState())
@@ -124,6 +129,7 @@ class DynamicConfigViewModel(
 
         val dbProfile = database.appDatabaseQueries.getUserProfile().executeAsOneOrNull()
         val profile = dbProfile?.toDomain() ?: UserProfile()
+        val header = configRepository.loadInstitutionalHeaderSync()
 
         val lastBackupDate = database.appDatabaseQueries.getMetadata("last_backup_date").executeAsOneOrNull()
         val lastBackupPath = database.appDatabaseQueries.getMetadata("last_backup_path").executeAsOneOrNull()
@@ -140,6 +146,7 @@ class DynamicConfigViewModel(
                 prefixSortie = pfxSortie,
                 prefixDecharge = pfxDecharge,
                 userProfile = profile,
+                institutionalHeader = header,
                 lastBackupDate = lastBackupDate,
                 lastBackupPath = lastBackupPath,
                 lastRestoreDate = lastRestoreDate,
@@ -362,6 +369,52 @@ class DynamicConfigViewModel(
     fun savePrefixes(cmd: String, bl: String, bs: String, dch: String) {
         viewModelScope.launch {
             savePrefixesSync(cmd, bl, bs, dch)
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Institutional Header Configuration
+    // ------------------------------------------------------------------------
+
+    fun saveInstitutionalHeaderSync(header: InstitutionalHeader): Boolean {
+        if (header.isBlank) {
+            _uiState.update { it.copy(actionErrorMessage = "L'en-tête institutionnel ne peut pas être entièrement vide.") }
+            return false
+        }
+        val saved = configRepository.saveInstitutionalHeaderSync(header)
+        loadDataSync()
+        _uiState.update {
+            it.copy(
+                institutionalHeader = saved,
+                actionSuccessMessage = "En-tête institutionnel des documents enregistré avec succès.",
+                actionErrorMessage = null
+            )
+        }
+        return true
+    }
+
+    fun saveInstitutionalHeader(header: InstitutionalHeader) {
+        viewModelScope.launch {
+            saveInstitutionalHeaderSync(header)
+        }
+    }
+
+    fun resetInstitutionalHeaderSync(): InstitutionalHeader {
+        val reset = configRepository.resetInstitutionalHeaderSync()
+        loadDataSync()
+        _uiState.update {
+            it.copy(
+                institutionalHeader = reset,
+                actionSuccessMessage = "En-tête institutionnel réinitialisé aux valeurs par défaut.",
+                actionErrorMessage = null
+            )
+        }
+        return reset
+    }
+
+    fun resetInstitutionalHeader() {
+        viewModelScope.launch {
+            resetInstitutionalHeaderSync()
         }
     }
 

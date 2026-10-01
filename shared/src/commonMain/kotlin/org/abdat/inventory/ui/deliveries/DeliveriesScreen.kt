@@ -87,17 +87,30 @@ import org.abdat.inventory.domain.model.BonDeCommande
 import org.abdat.inventory.domain.model.Person
 import org.abdat.inventory.domain.model.Service
 import org.abdat.inventory.theme.AppTheme
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppDateTimePickerField
 import org.abdat.inventory.ui.components.AppSearchBar
 import org.abdat.inventory.ui.components.EmptyState
+import org.abdat.inventory.ui.components.OperationExportDialogs
+import org.abdat.inventory.ui.components.OperationExportMenu
 import org.abdat.inventory.ui.components.formatDzd
+import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DeliveriesExportDataMapper
+import org.abdat.inventory.util.DocxExporter
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.PdfExporter
+import org.abdat.inventory.util.showSaveFileDialog
 
 @Composable
 fun DeliveriesScreen(viewModel: DeliveriesViewModel) {
     val state by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     var selectedDeliveryForDetail by remember { mutableStateOf<DeliveryDisplayItem?>(null) }
+    var exportSuccessPath by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -143,10 +156,92 @@ fun DeliveriesScreen(viewModel: DeliveriesViewModel) {
             DeliveryHistoryCard(
                 state = state,
                 viewModel = viewModel,
-                onViewDetails = { selectedDeliveryForDetail = it }
+                onViewDetails = { selectedDeliveryForDetail = it },
+                onExportCsv = {
+                    coroutineScope.launch {
+                        val path = showSaveFileDialog(
+                            title = "Exporter Registre Réceptions CSV",
+                            defaultFileName = "registre_receptions.csv",
+                            filters = listOf(FileTypeFilter.CSV)
+                        )
+                        if (path != null) {
+                            try {
+                                val dataSet = DeliveriesExportDataMapper.toExportDataSet(state.filteredDeliveries, state.searchQuery)
+                                CsvExporter.writeCsv(path, dataSet.headers, dataSet.rows)
+                                exportSuccessPath = path
+                                exportError = null
+                            } catch (e: Exception) {
+                                exportError = e.message ?: "Erreur inconnue lors de l'export CSV"
+                                exportSuccessPath = null
+                            }
+                        }
+                    }
+                },
+                onExportWord = {
+                    coroutineScope.launch {
+                        val path = showSaveFileDialog(
+                            title = "Exporter Registre Réceptions Word",
+                            defaultFileName = "registre_receptions.docx",
+                            filters = listOf(FileTypeFilter.DOCX)
+                        )
+                        if (path != null) {
+                            try {
+                                val dataSet = DeliveriesExportDataMapper.toExportDataSet(state.filteredDeliveries, state.searchQuery)
+                                DocxExporter.generateGenericTableDocx(
+                                    filePath = path,
+                                    documentTitle = dataSet.title,
+                                    subtitle = dataSet.subtitle,
+                                    metadata = dataSet.metadata,
+                                    headers = dataSet.headers,
+                                    rows = dataSet.rows
+                                )
+                                exportSuccessPath = path
+                                exportError = null
+                            } catch (e: Exception) {
+                                exportError = e.message ?: "Erreur inconnue lors de l'export Word"
+                                exportSuccessPath = null
+                            }
+                        }
+                    }
+                },
+                onExportPdf = {
+                    coroutineScope.launch {
+                        val path = showSaveFileDialog(
+                            title = "Exporter Registre Réceptions PDF",
+                            defaultFileName = "registre_receptions.pdf",
+                            filters = listOf(FileTypeFilter.PDF)
+                        )
+                        if (path != null) {
+                            try {
+                                val dataSet = DeliveriesExportDataMapper.toExportDataSet(state.filteredDeliveries, state.searchQuery)
+                                PdfExporter.generateGenericTablePdf(
+                                    filePath = path,
+                                    documentTitle = dataSet.title,
+                                    subtitle = dataSet.subtitle,
+                                    metadata = dataSet.metadata,
+                                    headers = dataSet.headers,
+                                    rows = dataSet.rows
+                                )
+                                exportSuccessPath = path
+                                exportError = null
+                            } catch (e: Exception) {
+                                exportError = e.message ?: "Erreur inconnue lors de l'export PDF"
+                                exportSuccessPath = null
+                            }
+                        }
+                    }
+                }
             )
         }
     }
+
+    OperationExportDialogs(
+        successPath = exportSuccessPath,
+        errorMessage = exportError,
+        itemCount = state.filteredDeliveries.size,
+        onDismissSuccess = { exportSuccessPath = null },
+        onDismissError = { exportError = null }
+    )
 
     // Interactive Detail Modal
     selectedDeliveryForDetail?.let { delivery ->
@@ -1227,7 +1322,10 @@ private fun DeliveryReconciliationTable(
 private fun DeliveryHistoryCard(
     state: DeliveriesUiState,
     viewModel: DeliveriesViewModel,
-    onViewDetails: (DeliveryDisplayItem) -> Unit
+    onViewDetails: (DeliveryDisplayItem) -> Unit,
+    onExportCsv: () -> Unit,
+    onExportWord: () -> Unit,
+    onExportPdf: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1286,23 +1384,12 @@ private fun DeliveryHistoryCard(
                         modifier = Modifier.width(320.dp)
                     )
 
-                    OutlinedButton(
-                        onClick = { },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AppTheme.colors.textPrimary)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Print,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(text = "Imprimer Journal", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+                    OperationExportMenu(
+                        label = "Exporter Registre",
+                        onExportCsv = onExportCsv,
+                        onExportWord = onExportWord,
+                        onExportPdf = onExportPdf
+                    )
                 }
             }
 

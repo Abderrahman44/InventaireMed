@@ -19,11 +19,17 @@ import app.cash.sqldelight.coroutines.mapToList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import org.abdat.inventory.data.mapper.toDomain
+import org.abdat.inventory.data.repository.CategoryRepository
 import org.abdat.inventory.database.AppDatabase
+import org.abdat.inventory.domain.model.CategoryTaxonomy
 import org.abdat.inventory.domain.model.Convention
 import org.abdat.inventory.domain.model.ConventionItem
 import org.abdat.inventory.domain.model.Fournisseur
+import org.abdat.inventory.ui.components.ArticleFormValues
 
 enum class SupplierDetailTab(val label: String) {
     CONVENTIONS("Conventions"),
@@ -50,7 +56,8 @@ data class ConventionQuotaBalance(
     val remainingQuantity: Double,
     val unitPrice: Double = 0.0,
     val sousFamily: String = "",
-    val family: String = ""
+    val family: String = "",
+    val codeArticle: String = ""
 )
 
 data class SupplierHistoryItem(
@@ -78,6 +85,8 @@ data class SuppliersUiState(
     val isAddSupplierDialogOpen: Boolean = false,
     val isAddConventionDialogOpen: Boolean = false,
     val isAddArticleDialogOpen: Boolean = false,
+    val articleSaveError: String? = null,
+    val taxonomy: CategoryTaxonomy = CategoryTaxonomy(),
     val isSensitiveWarningDialogOpen: Boolean = false,
     val isEditArticleDialogOpen: Boolean = false,
     val articlePendingEdit: ConventionQuotaBalance? = null,
@@ -86,6 +95,7 @@ data class SuppliersUiState(
 
 class SuppliersViewModel(
     private val database: AppDatabase,
+    private val categoryRepository: CategoryRepository,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
 
@@ -176,6 +186,9 @@ class SuppliersViewModel(
 
         val stockPriceMap = database.appDatabaseQueries.selectAllStockArticles().executeAsList()
             .associate { it.designation.lowercase().trim() to it.unit_price }
+        val stockCodeMap = database.appDatabaseQueries.selectAllStockArticles().executeAsList()
+            .groupBy { it.designation.lowercase().trim() }
+            .mapValues { (_, rows) -> rows.minByOrNull { it.id }!!.code_article }
 
         // Quota balances for each convention
         val balancesMap = mutableMapOf<Long, ImmutableList<ConventionQuotaBalance>>()
@@ -193,7 +206,8 @@ class SuppliersViewModel(
                         minQuantity = it.minQuantity,
                         orderedQuantity = it.orderedQuantity,
                         remainingQuantity = it.remainingQuantity,
-                        unitPrice = price
+                        unitPrice = price,
+                        codeArticle = stockCodeMap[it.designation.lowercase().trim()] ?: ""
                     )
                 }
             balancesMap[conv.id] = balances.toImmutableList()
@@ -433,45 +447,89 @@ class SuppliersViewModel(
         loadSupplierDetailsSync(currentSupplier.id)
     }
 
+    private fun todayIso(): String =
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+
     fun openAddArticleDialog() {
-        _uiState.update { it.copy(isAddArticleDialogOpen = true) }
+        _uiState.update {
+            it.copy(
+                isAddArticleDialogOpen = true,
+                articleSaveError = null,
+                taxonomy = categoryRepository.currentTaxonomy()
+            )
+        }
     }
 
     fun closeAddArticleDialog() {
-        _uiState.update { it.copy(isAddArticleDialogOpen = false) }
+        _uiState.update { it.copy(isAddArticleDialogOpen = false, articleSaveError = null) }
     }
 
     fun addArticleToConvention(
         conventionId: Long,
-        designation: String,
-        unite: String,
-        quantity: Double,
+        article: ArticleFormValues,
+        quota: Double,
         minQuantity: Double = 5.0
     ) {
         viewModelScope.launch {
-            addArticleToConventionSync(conventionId, designation, unite, quantity, minQuantity)
+            addArticleToConventionSync(conventionId, article, quota, minQuantity)
         }
     }
 
+    /**
+     * Creates the catalog article and its convention item atomically, so the article is visible in
+     * Gestion de stock. Writes nothing and reports [SuppliersUiState.articleSaveError] when the
+     * category pair is not configured or the article code is already used.
+     */
     fun addArticleToConventionSync(
         conventionId: Long,
-        designation: String,
-        unite: String,
-        quantity: Double,
+        article: ArticleFormValues,
+        quota: Double,
         minQuantity: Double = 5.0
-    ) {
-        database.appDatabaseQueries.insertConventionItem(
-            convention_id = conventionId,
-            designation = designation.trim(),
-            unite = unite.trim(),
-            quantity = quantity,
-            min_quantity = minQuantity
-        )
+    ): Boolean {
+        val resolved = categoryRepository.currentTaxonomy().resolvePair(article.family, article.sousFamily)
+        if (resolved == null) {
+            _uiState.update {
+                it.copy(
+                    articleSaveError = "Famille « ${article.family} » / sous-famille « ${article.sousFamily} » non configurée. " +
+                        "Sélectionnez une catégorie existante ou ajoutez-la dans Paramètres & Config."
+                )
+            }
+            return false
+        }
+        val queries = database.appDatabaseQueries
+        if (queries.selectStockArticleByCode(article.code).executeAsOneOrNull() != null) {
+            _uiState.update { it.copy(articleSaveError = "Le code article « ${article.code} » existe déjà dans le stock.") }
+            return false
+        }
+        database.transaction {
+            queries.insertStockArticle(
+                code_article = article.code,
+                additional_reference_id = article.barcode,
+                designation = article.designation,
+                unite_quantite = article.unite,
+                family = resolved.first.label,
+                sous_family = resolved.second.label,
+                quantity = article.quantity,
+                unit_price = article.unitPrice,
+                expiration_date = article.expirationDate,
+                is_archived = 0L,
+                is_obsolete = 0L,
+                date = todayIso()
+            )
+            queries.insertConventionItem(
+                convention_id = conventionId,
+                designation = article.designation,
+                unite = article.unite,
+                quantity = quota,
+                min_quantity = minQuantity
+            )
+        }
         closeAddArticleDialog()
         val supplierId = _uiState.value.selectedSupplier?.id
         if (supplierId != null) {
             loadSupplierDetailsSync(supplierId)
         }
+        return true
     }
 
     fun requestEditArticle(article: ConventionQuotaBalance) {
