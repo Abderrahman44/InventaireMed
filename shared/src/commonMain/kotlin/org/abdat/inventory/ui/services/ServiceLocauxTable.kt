@@ -49,6 +49,7 @@ import org.abdat.inventory.domain.model.Local
 import org.abdat.inventory.domain.model.Service
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
+import org.abdat.inventory.ui.components.EmptyState
 
 @Composable
 fun SelectedServiceHeaderCard(
@@ -313,11 +314,7 @@ fun ServiceLocauxTableCard(
                         .padding(vertical = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "Aucun local configuré pour ce service.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.colors.textSecondary
-                    )
+                    EmptyState(message = "Aucun local configuré pour ce service.")
                 }
             } else {
                 LazyColumn(

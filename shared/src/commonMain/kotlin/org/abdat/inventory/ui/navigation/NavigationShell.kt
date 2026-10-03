@@ -205,7 +205,7 @@ fun MainNavigationShell(
                                     .background(AppTheme.colors.statusSuccess, CircleShape)
                             )
                             Text(
-                                text = "Plateforme A • Quai 03 • " + if (language == AppLanguage.FR) "FR" else "EN",
+                                text = "Plateforme Logistique • " + if (language == AppLanguage.FR) "FR" else "EN",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -216,9 +216,9 @@ fun MainNavigationShell(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Nav Menu Items
+                    // Section 1: Opérations
                     Text(
-                        text = strings.mainNavigation,
+                        text = strings.navOperations,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp
@@ -229,18 +229,51 @@ fun MainNavigationShell(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    listOf(
+                    val operationsRoutes = listOf(
+                        AppScreenRoute.DASHBOARD,
                         AppScreenRoute.INVENTORY,
                         AppScreenRoute.SUPPLIERS,
                         AppScreenRoute.ORDERS,
                         AppScreenRoute.DELIVERIES,
                         AppScreenRoute.SORTIES,
-                        AppScreenRoute.DECHARGES,
+                        AppScreenRoute.DECHARGES
+                    )
+
+                    operationsRoutes.forEach { route ->
+                        val isSelected = route == currentRoute
+                        SidebarNavItem(
+                            title = route.localizedTitle(strings),
+                            icon = route.icon,
+                            isSelected = isSelected,
+                            onClick = { onNavigate(route) }
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Section 2: Configuration
+                    Text(
+                        text = strings.navConfiguration,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        ),
+                        color = AppTheme.colors.textSecondary.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    val configRoutes = listOf(
                         AppScreenRoute.SERVICES,
                         AppScreenRoute.PERSONNEL,
-                        AppScreenRoute.CONFIG,
-                        AppScreenRoute.DASHBOARD
-                    ).forEach { route ->
+                        AppScreenRoute.CONFIG
+                    )
+
+                    configRoutes.forEach { route ->
                         val isSelected = route == currentRoute
                         SidebarNavItem(
                             title = route.localizedTitle(strings),

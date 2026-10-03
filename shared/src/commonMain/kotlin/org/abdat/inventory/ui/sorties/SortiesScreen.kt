@@ -93,10 +93,17 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppDateTimePickerField
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.OperationExportDialogs
+import org.abdat.inventory.ui.components.OperationExportMenu
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DocxExporter
 import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.SortiesCsvMapper
+import org.abdat.inventory.util.SortiesExportDataMapper
 import org.abdat.inventory.util.showSaveFileDialog
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -202,42 +209,83 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = {
+                    OperationExportMenu(
+                        label = "Exporter Registre",
+                        onExportCsv = {
                             coroutineScope.launch {
                                 val path = showSaveFileDialog(
                                     title = "Exporter Registre Sorties CSV",
                                     defaultFileName = "registre_sorties.csv",
-                                    filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                                    filters = listOf(FileTypeFilter.CSV)
                                 )
                                 if (path != null) {
                                     try {
-                                        val (headers, rows) = SortiesCsvMapper.toHeadersAndRows(state.filteredSorties)
-                                        CsvExporter.writeCsv(path, headers, rows)
+                                        val dataSet = SortiesExportDataMapper.toExportDataSet(state.filteredSorties, state.searchQuery)
+                                        CsvExporter.writeCsv(path, dataSet.headers, dataSet.rows)
                                         csvExportSuccessPath = path
                                         csvExportError = null
                                     } catch (e: Exception) {
-                                        csvExportError = e.message ?: "Erreur inconnue lors de l'export"
+                                        csvExportError = e.message ?: "Erreur inconnue lors de l'export CSV"
                                         csvExportSuccessPath = null
                                     }
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AppTheme.colors.textPrimary),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileDownload,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Exporter Registre CSV",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
-                        )
-                    }
+                        onExportWord = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Sorties Word",
+                                    defaultFileName = "registre_sorties.docx",
+                                    filters = listOf(FileTypeFilter.DOCX)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val dataSet = SortiesExportDataMapper.toExportDataSet(state.filteredSorties, state.searchQuery)
+                                        DocxExporter.generateGenericTableDocx(
+                                            filePath = path,
+                                            documentTitle = dataSet.title,
+                                            subtitle = dataSet.subtitle,
+                                            metadata = dataSet.metadata,
+                                            headers = dataSet.headers,
+                                            rows = dataSet.rows
+                                        )
+                                        csvExportSuccessPath = path
+                                        csvExportError = null
+                                    } catch (e: Exception) {
+                                        csvExportError = e.message ?: "Erreur inconnue lors de l'export Word"
+                                        csvExportSuccessPath = null
+                                    }
+                                }
+                            }
+                        },
+                        onExportPdf = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Sorties PDF",
+                                    defaultFileName = "registre_sorties.pdf",
+                                    filters = listOf(FileTypeFilter.PDF)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val dataSet = SortiesExportDataMapper.toExportDataSet(state.filteredSorties, state.searchQuery)
+                                        PdfExporter.generateGenericTablePdf(
+                                            filePath = path,
+                                            documentTitle = dataSet.title,
+                                            subtitle = dataSet.subtitle,
+                                            metadata = dataSet.metadata,
+                                            headers = dataSet.headers,
+                                            rows = dataSet.rows
+                                        )
+                                        csvExportSuccessPath = path
+                                        csvExportError = null
+                                    } catch (e: Exception) {
+                                        csvExportError = e.message ?: "Erreur inconnue lors de l'export PDF"
+                                        csvExportSuccessPath = null
+                                    }
+                                }
+                            }
+                        }
+                    )
 
                     Button(
                         onClick = { isAddArticleDialogOpen = true },
@@ -375,7 +423,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
 
                 MetricCard(
                     title = "Valeur Distribuée",
-                    value = "${state.monthlyDistributedDzd.toInt()} DZD",
+                    value = formatDzd(state.monthlyDistributedDzd),
                     subtitle = "Imputation ce mois",
                     icon = Icons.Default.Payments,
                     accentColor = MaterialTheme.colorScheme.primary,
@@ -385,7 +433,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                 MetricCard(
                     title = "Services Demandeurs",
                     value = "${state.activeServicesCount} Actifs",
-                    subtitle = "Bloc, Bioméd., Chirurgie",
+                    subtitle = "Centres de coût destinataires",
                     icon = Icons.Default.Business,
                     accentColor = Color(0xFF6366F1),
                     modifier = Modifier.weight(1f)
@@ -502,7 +550,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                             CustomInputField(
                                 value = state.paperStubReference,
                                 onValueChange = { viewModel.updatePaperStubReference(it) },
-                                placeholder = "Ex: BSP-4402"
+                                placeholder = "Ex: BSP-001"
                             )
                         }
 
@@ -708,11 +756,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Aucun article dans ce bon. Cliquez sur '+ Ajouter un Article' pour sélectionner des produits.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = AppTheme.colors.textSecondary
-                                )
+                                EmptyState(message = "Aucun article dans ce bon. Cliquez sur '+ Ajouter un Article' pour sélectionner des produits.")
                             }
                         } else {
                             // Table Header
@@ -817,7 +861,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                         color = AppTheme.colors.textSecondary
                                     )
                                     Text(
-                                        text = "${state.totalValuationDzd.toInt()} DZD",
+                                        text = formatDzd(state.totalValuationDzd),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                         color = AppTheme.colors.statusSuccess
                                     )
@@ -974,18 +1018,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                     }
 
                     if (state.filteredSorties.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Aucun bon de sortie enregistré.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppTheme.colors.textSecondary
-                            )
-                        }
+                        EmptyState(message = "Aucun bon de sortie enregistré.")
                     } else {
                         state.filteredSorties.forEach { item ->
                             Row(
@@ -1066,7 +1099,7 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
                                 )
 
                                 Text(
-                                    text = "${item.totalAmountDzd.toInt()} DZD",
+                                    text = formatDzd(item.totalAmountDzd),
                                     modifier = Modifier.weight(1.2f),
                                     textAlign = TextAlign.End,
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
@@ -1124,62 +1157,14 @@ fun SortiesScreen(viewModel: SortiesViewModel) {
         )
     }
 
-    // CSV Export Success Notification
-    csvExportSuccessPath?.let { path ->
-        Dialog(onDismissRequest = { csvExportSuccessPath = null }) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = AppTheme.colors.surfaceWhite,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = AppTheme.colors.statusSuccess,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "Export Registre CSV",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = AppTheme.colors.textPrimary
-                        )
-                    }
-                    Text(
-                        text = "Le fichier a été exporté avec succès (${state.filteredSorties.size} enregistrements).\n\nChemin : $path",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTheme.colors.textSecondary
-                    )
-                    Button(
-                        onClick = { csvExportSuccessPath = null },
-                        modifier = Modifier.align(Alignment.End),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("OK")
-                    }
-                }
-            }
-        }
-    }
-
-    // CSV Export Error Notification
-    csvExportError?.let { error ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { csvExportError = null },
-            title = { Text("Erreur d'export", fontWeight = FontWeight.Bold) },
-            text = { Text("L'export CSV a échoué :\n$error") },
-            confirmButton = {
-                Button(onClick = { csvExportError = null }) { Text("OK") }
-            }
-        )
-    }
+    // Export Feedback Dialogs
+    OperationExportDialogs(
+        successPath = csvExportSuccessPath,
+        errorMessage = csvExportError,
+        itemCount = state.filteredSorties.size,
+        onDismissSuccess = { csvExportSuccessPath = null },
+        onDismissError = { csvExportError = null }
+    )
 }
 
 @Composable
@@ -1861,7 +1846,7 @@ private fun AddArticleDialog(
                                     color = AppTheme.colors.textPrimary
                                 )
                                 Text(
-                                    text = "${art.codeArticle} • ${art.family} • ${art.unitPrice.toInt()} DZD",
+                                    text = "${art.codeArticle} • ${art.family} • ${formatDzd(art.unitPrice)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AppTheme.colors.textSecondary
                                 )
@@ -1980,7 +1965,7 @@ private fun SortieDetailDialog(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Valorisation Globale :", style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text("${item.totalAmountDzd.toInt()} DZD", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.statusSuccess)
+                    Text(formatDzd(item.totalAmountDzd), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.statusSuccess)
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

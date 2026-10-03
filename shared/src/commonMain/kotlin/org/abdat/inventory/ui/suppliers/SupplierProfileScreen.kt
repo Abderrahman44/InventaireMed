@@ -63,6 +63,7 @@ import org.abdat.inventory.domain.model.Fournisseur
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
@@ -435,7 +436,7 @@ fun SupplierProfileScreen(
 
             MetricCard(
                 title = "Plafond Contractuel",
-                value = "${totalCeilingDzd.toLong()} DZD",
+                value = formatDzd(totalCeilingDzd),
                 subtitle = "Cumul global",
                 icon = Icons.Default.Payments,
                 accentColor = MaterialTheme.colorScheme.primary,

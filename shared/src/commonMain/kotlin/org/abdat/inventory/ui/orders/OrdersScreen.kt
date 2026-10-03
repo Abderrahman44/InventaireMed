@@ -77,11 +77,18 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.OperationExportDialogs
+import org.abdat.inventory.ui.components.OperationExportMenu
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.ui.suppliers.ConventionQuotaBalance
 import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DocxExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.OrdersCsvMapper
+import org.abdat.inventory.util.OrdersExportDataMapper
+import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.runtime.rememberCoroutineScope
@@ -183,32 +190,83 @@ fun OrdersScreen(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
+                    OperationExportMenu(
+                        label = "Exporter Registre",
+                        onExportCsv = {
                             coroutineScope.launch {
                                 val path = showSaveFileDialog(
                                     title = "Exporter Registre Commandes CSV",
                                     defaultFileName = "registre_commandes.csv",
-                                    filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                                    filters = listOf(FileTypeFilter.CSV)
                                 )
                                 if (path != null) {
                                     try {
-                                        val (headers, rows) = OrdersCsvMapper.toHeadersAndRows(state.filteredOrders)
-                                        CsvExporter.writeCsv(path, headers, rows)
+                                        val exportData = OrdersExportDataMapper.toExportDataSet(state.filteredOrders, state.searchQuery)
+                                        CsvExporter.writeCsv(path, exportData.headers, exportData.rows)
                                         exportSuccessPath = path
                                         exportError = null
                                     } catch (e: Exception) {
-                                        exportError = e.message ?: "Erreur inconnue lors de l'export"
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export CSV"
                                         exportSuccessPath = null
                                     }
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Text("Exporter Registre CSV", style = MaterialTheme.typography.labelMedium)
-                    }
+                        onExportWord = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Commandes Word",
+                                    defaultFileName = "registre_commandes.docx",
+                                    filters = listOf(FileTypeFilter.DOCX)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val exportData = OrdersExportDataMapper.toExportDataSet(state.filteredOrders, state.searchQuery)
+                                        DocxExporter.generateGenericTableDocx(
+                                            filePath = path,
+                                            documentTitle = exportData.title,
+                                            subtitle = exportData.subtitle,
+                                            metadata = exportData.metadata,
+                                            headers = exportData.headers,
+                                            rows = exportData.rows
+                                        )
+                                        exportSuccessPath = path
+                                        exportError = null
+                                    } catch (e: Exception) {
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export Word"
+                                        exportSuccessPath = null
+                                    }
+                                }
+                            }
+                        },
+                        onExportPdf = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Commandes PDF",
+                                    defaultFileName = "registre_commandes.pdf",
+                                    filters = listOf(FileTypeFilter.PDF)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val exportData = OrdersExportDataMapper.toExportDataSet(state.filteredOrders, state.searchQuery)
+                                        PdfExporter.generateGenericTablePdf(
+                                            filePath = path,
+                                            documentTitle = exportData.title,
+                                            subtitle = exportData.subtitle,
+                                            metadata = exportData.metadata,
+                                            headers = exportData.headers,
+                                            rows = exportData.rows
+                                        )
+                                        exportSuccessPath = path
+                                        exportError = null
+                                    } catch (e: Exception) {
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export PDF"
+                                        exportSuccessPath = null
+                                    }
+                                }
+                            }
+                        }
+                    )
                     Button(
                         onClick = { viewModel.openNewOrderDialog() },
                         shape = RoundedCornerShape(8.dp),
@@ -237,7 +295,7 @@ fun OrdersScreen(
             )
             MetricCard(
                 title = "Montant Engagé (DZD)",
-                value = "${state.totalCommittedDzd.toLong()} DZD",
+                value = formatDzd(state.totalCommittedDzd),
                 subtitle = "Total engagé validé",
                 icon = Icons.Default.Payments,
                 accentColor = MaterialTheme.colorScheme.primary,
@@ -331,26 +389,18 @@ fun OrdersScreen(
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp).padding(bottom = 16.dp),
-                                tint = AppTheme.colors.textSecondary
-                            )
-                            Text(
-                                text = "Aucun bon de commande trouvé",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppTheme.colors.textSecondary
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = { 
-                                viewModel.onSearchQueryChange("")
-                                viewModel.onFilterChange(OrderStatusFilter.ALL)
-                            }) {
-                                Text("Réinitialiser les filtres")
+                        EmptyState(
+                            message = "Aucun bon de commande trouvé",
+                            icon = Icons.Default.Search,
+                            action = {
+                                TextButton(onClick = {
+                                    viewModel.onSearchQueryChange("")
+                                    viewModel.onFilterChange(OrderStatusFilter.ALL)
+                                }) {
+                                    Text("Réinitialiser les filtres")
+                                }
                             }
-                        }
+                        )
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -400,13 +450,13 @@ fun OrdersScreen(
                                 )
                                 Column(modifier = Modifier.width(160.dp)) {
                                     Text(
-                                        text = "${item.totalAmountDzd.toLong()} DZD",
+                                        text = formatDzd(item.totalAmountDzd),
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = AppTheme.colors.textPrimary
                                     )
                                     if (item.tvaRate > 0) {
                                         Text(
-                                            text = "HT: ${item.subtotalHtDzd.toLong()} DZD (${item.tvaRate}%)",
+                                            text = "HT: ${formatDzd(item.subtotalHtDzd)} (${item.tvaRate}%)",
                                             style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                             color = AppTheme.colors.textSecondary
                                         )
@@ -548,62 +598,14 @@ fun OrdersScreen(
         )
     }
 
-    // CSV Export Success Notification
-    exportSuccessPath?.let { path ->
-        Dialog(onDismissRequest = { exportSuccessPath = null }) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = AppTheme.colors.surfaceWhite,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = AppTheme.colors.statusSuccess,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "Export Registre CSV",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = AppTheme.colors.textPrimary
-                        )
-                    }
-                    Text(
-                        text = "Le fichier a été exporté avec succès (${state.filteredOrders.size} commandes).\n\nChemin : $path",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = AppTheme.colors.textSecondary
-                    )
-                    Button(
-                        onClick = { exportSuccessPath = null },
-                        modifier = Modifier.align(Alignment.End),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("OK")
-                    }
-                }
-            }
-        }
-    }
-
-    // CSV Export Error Notification
-    exportError?.let { error ->
-        AlertDialog(
-            onDismissRequest = { exportError = null },
-            title = { Text("Erreur d'export", fontWeight = FontWeight.Bold) },
-            text = { Text("L'export CSV a échoué :\n$error") },
-            confirmButton = {
-                Button(onClick = { exportError = null }) { Text("OK") }
-            }
-        )
-    }
+    // Export Feedback Dialogs
+    OperationExportDialogs(
+        successPath = exportSuccessPath,
+        errorMessage = exportError,
+        itemCount = state.filteredOrders.size,
+        onDismissSuccess = { exportSuccessPath = null },
+        onDismissError = { exportError = null }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -721,7 +723,7 @@ private fun NewOrderDialog(
                         onExpandedChange = { expandedConventionDropdown = it }
                     ) {
                         OutlinedTextField(
-                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - TVA ${currentConvention.tvaRate}% - Plafond ${currentConvention.totalMontant.toLong()} DZD" else "Sélectionner Convention",
+                            value = if (currentConvention != null) "Convention N° ${currentConvention.ordNumber} (${currentConvention.date}) - TVA ${currentConvention.tvaRate}% - Plafond ${formatDzd(currentConvention.totalMontant)}" else "Sélectionner Convention",
                             onValueChange = {},
                             readOnly = true,
                             label = { Text("2. Convention-Cadre Active") },
@@ -734,7 +736,7 @@ private fun NewOrderDialog(
                         ) {
                             conventions.forEach { conv ->
                                 DropdownMenuItem(
-                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - TVA ${conv.tvaRate}% - Plafond: ${conv.totalMontant.toLong()} DZD") },
+                                    text = { Text("Convention N° ${conv.ordNumber} (${conv.date}) - TVA ${conv.tvaRate}% - Plafond: ${formatDzd(conv.totalMontant)}") },
                                     onClick = {
                                         onConventionChange(conv.id)
                                         selectedArticle = null
@@ -885,7 +887,7 @@ private fun NewOrderDialog(
                                                 }
                                             }
                                             Text(
-                                                "Reste: ${article.remainingQuantity.toLong()} / ${article.agreedQuantity.toLong()} ${article.unite} • Prix: ${article.unitPrice.toLong()} DZD",
+                                                "Reste: ${article.remainingQuantity.toLong()} / ${article.agreedQuantity.toLong()} ${article.unite} • Prix: ${formatDzd(article.unitPrice)}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = if (article.remainingQuantity <= article.minQuantity) AppTheme.colors.statusUrgent else AppTheme.colors.textSecondary
                                             )
@@ -917,7 +919,7 @@ private fun NewOrderDialog(
                                     color = if (selectedArticle!!.remainingQuantity <= 0) AppTheme.colors.statusUrgent else AppTheme.colors.statusSuccess
                                 )
                                 Text(
-                                    text = "Prix: ${selectedArticle!!.unitPrice.toLong()} DZD / ${selectedArticle!!.unite}",
+                                    text = "Prix: ${formatDzd(selectedArticle!!.unitPrice)} / ${selectedArticle!!.unite}",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -952,6 +954,7 @@ private fun NewOrderDialog(
                                             draftItems.add(
                                                 OrderDraftItem(
                                                     conventionItemId = art.conventionItemId,
+                                                    codeArticle = art.codeArticle,
                                                     designation = art.designation,
                                                     unite = art.unite,
                                                     quantity = enteredQty,
@@ -1012,10 +1015,10 @@ private fun NewOrderDialog(
                                 ) {
                                     Column(modifier = Modifier.weight(2f)) {
                                         Text(item.designation, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
-                                        Text("${item.quantity.toLong()} ${item.unite} × ${item.unitPrice.toLong()} DZD", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
+                                        Text("${item.quantity.toLong()} ${item.unite} × ${formatDzd(item.unitPrice)}", style = MaterialTheme.typography.labelSmall, color = AppTheme.colors.textSecondary)
                                     }
                                     Text(
-                                        "${item.subtotal.toLong()} DZD",
+                                        formatDzd(item.subtotal),
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(horizontal = 8.dp)
@@ -1058,7 +1061,7 @@ private fun NewOrderDialog(
                                 color = AppTheme.colors.textSecondary
                             )
                             Text(
-                                "${subtotalHt.toLong()} DZD",
+                                formatDzd(subtotalHt),
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                 color = AppTheme.colors.textPrimary
                             )
@@ -1073,7 +1076,7 @@ private fun NewOrderDialog(
                                 color = AppTheme.colors.textSecondary
                             )
                             Text(
-                                "${tvaAmount.toLong()} DZD",
+                                formatDzd(tvaAmount),
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                                 color = AppTheme.colors.textPrimary
                             )
@@ -1093,7 +1096,7 @@ private fun NewOrderDialog(
                                 color = AppTheme.colors.textPrimary
                             )
                             Text(
-                                "${totalTtc.toLong()} DZD",
+                                formatDzd(totalTtc),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -1112,7 +1115,7 @@ private fun NewOrderDialog(
                 },
                 enabled = ref.isNotBlank() && currentSupplier != null && draftItems.isNotEmpty()
             ) {
-                Text("Émettre Bon de Commande (${draftItems.size} art. - ${totalTtc.toLong()} DZD TTC)")
+                Text("Émettre Bon de Commande (${draftItems.size} art. - ${formatDzd(totalTtc)} TTC)")
             }
         },
         dismissButton = {

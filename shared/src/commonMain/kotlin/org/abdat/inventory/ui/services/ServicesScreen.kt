@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 
 @Composable
 fun ServicesScreen(viewModel: ServicesViewModel) {
@@ -317,11 +318,7 @@ fun ServicesScreen(viewModel: ServicesViewModel) {
                                     .padding(vertical = 32.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "Aucun service ne correspond à la recherche.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTheme.colors.textSecondary
-                                )
+                                EmptyState(message = "Aucun service ne correspond à la recherche.")
                             }
                         } else {
                             LazyColumn(

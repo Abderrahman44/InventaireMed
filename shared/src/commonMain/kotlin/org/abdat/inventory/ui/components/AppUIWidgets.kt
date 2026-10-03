@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.abdat.inventory.theme.AppTheme
@@ -126,6 +129,70 @@ fun <T> AppFilterTabs(
                     color = if (isSelected) MaterialTheme.colorScheme.primary else AppTheme.colors.textSecondary
                 )
             }
+        }
+    }
+}
+
+/**
+ * Canonical DZD amount formatter used across every screen: space-grouped
+ * thousands, no forced decimals (e.g. `124 920 DZD`).
+ */
+fun formatDzd(amount: Double): String {
+    val integerPart = amount.toLong()
+    val sign = if (integerPart < 0) "-" else ""
+    val grouped = kotlin.math.abs(integerPart).toString()
+        .reversed()
+        .chunked(3)
+        .joinToString(" ")
+        .reversed()
+    return "$sign$grouped DZD"
+}
+
+fun formatDzd(amount: Long): String = formatDzd(amount.toDouble())
+
+fun formatDzd(amount: Int): String = formatDzd(amount.toDouble())
+
+@Composable
+fun EmptyState(
+    message: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    action: (@Composable () -> Unit)? = null
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = AppTheme.spacing.xl),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (icon != null) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = AppTheme.colors.textSecondary.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(12.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = AppTheme.colors.textSecondary
+                )
+            }
+            Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppTheme.colors.textSecondary,
+            textAlign = TextAlign.Center
+        )
+        if (action != null) {
+            Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+            action()
         }
     }
 }

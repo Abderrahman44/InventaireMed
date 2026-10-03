@@ -61,6 +61,11 @@ import kotlinx.coroutines.launch
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.OperationExportMenu
+import org.abdat.inventory.ui.components.formatDzd
+import org.abdat.inventory.util.ConsumptionExportDataMapper
+import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DocxExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
@@ -115,70 +120,119 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
                     modifier = Modifier.width(300.dp)
                 )
 
-                Button(
-                    onClick = {
+                OperationExportMenu(
+                    label = strings.printReport,
+                    onExportCsv = {
                         if (state.filteredItems.isEmpty()) {
                             viewModel.setExportError(strings.noConsumptionFound)
-                            return@Button
+                            return@OperationExportMenu
                         }
                         coroutineScope.launch {
-                            val defaultName = "Rapport_Consommation_${state.filterState.dateFrom.ifBlank { "Debut" }}_${state.filterState.dateTo.ifBlank { "Fin" }}.pdf"
+                            val defaultName = "consommation_${state.filterState.dateFrom.ifBlank { "debut" }}_${state.filterState.dateTo.ifBlank { "fin" }}.csv"
                             val path = showSaveFileDialog(
-                                title = strings.printReport,
+                                title = "Exporter Consommation CSV",
                                 defaultFileName = defaultName,
-                                filters = listOf(FileTypeFilter("PDF Files", "pdf"))
+                                filters = listOf(FileTypeFilter.CSV)
                             )
                             if (path != null) {
                                 try {
-                                    val headers = listOf(
-                                        "Date",
-                                        "Réf. Bon",
-                                        "Service",
-                                        "Code",
-                                        "Désignation",
-                                        "Famille",
-                                        "Sous-Famille",
-                                        "Quantité",
-                                        "P.U. (DZD)",
-                                        "Total (DZD)"
-                                    )
-                                    val rows = state.filteredItems.map { item ->
-                                        listOf(
-                                            item.date,
-                                            item.referenceBon,
-                                            item.serviceName,
-                                            item.codeArticle,
-                                            item.designation,
-                                            item.family,
-                                            item.sousFamily,
-                                            "${item.quantity.toInt()}",
-                                            formatDzd(item.unitPrice),
-                                            formatDzd(item.totalValue)
-                                        )
-                                    }
-
                                     val dateRangeText = if (state.filterState.dateFrom.isNotBlank() || state.filterState.dateTo.isNotBlank()) {
                                         "Du ${state.filterState.dateFrom.ifBlank { "---" }} Au ${state.filterState.dateTo.ifBlank { "---" }}"
-                                    } else "Toute la période"
-
+                                    } else ""
                                     val serviceText = state.filterState.selectedServiceId?.let { sId ->
                                         state.services.firstOrNull { it.id == sId }?.name
-                                    } ?: strings.allServices
+                                    } ?: ""
+                                    val filterDesc = listOfNotNull(
+                                        dateRangeText.ifBlank { null },
+                                        if (serviceText.isNotBlank()) "Service: $serviceText" else null,
+                                        if (state.filterState.searchQuery.isNotBlank()) "Recherche: ${state.filterState.searchQuery}" else null
+                                    ).joinToString(" | ")
 
-                                    val familyText = if (!state.filterState.selectedFamily.isNullOrBlank()) {
-                                        if (!state.filterState.selectedSousFamily.isNullOrBlank()) {
-                                            "${state.filterState.selectedFamily} / ${state.filterState.selectedSousFamily}"
-                                        } else state.filterState.selectedFamily!!
-                                    } else strings.allFamilies
+                                    val dataSet = ConsumptionExportDataMapper.toExportDataSet(state.filteredItems, filterDesc)
+                                    CsvExporter.writeCsv(path, dataSet.headers, dataSet.rows)
+                                    viewModel.setExportSuccess("Rapport CSV généré avec succès : $path")
+                                } catch (e: Exception) {
+                                    viewModel.setExportError("Erreur lors de l'exportation CSV : ${e.message ?: "Erreur inconnue"}")
+                                }
+                            }
+                        }
+                    },
+                    onExportWord = {
+                        if (state.filteredItems.isEmpty()) {
+                            viewModel.setExportError(strings.noConsumptionFound)
+                            return@OperationExportMenu
+                        }
+                        coroutineScope.launch {
+                            val defaultName = "consommation_${state.filterState.dateFrom.ifBlank { "debut" }}_${state.filterState.dateTo.ifBlank { "fin" }}.docx"
+                            val path = showSaveFileDialog(
+                                title = "Exporter Consommation Word",
+                                defaultFileName = defaultName,
+                                filters = listOf(FileTypeFilter.DOCX)
+                            )
+                            if (path != null) {
+                                try {
+                                    val dateRangeText = if (state.filterState.dateFrom.isNotBlank() || state.filterState.dateTo.isNotBlank()) {
+                                        "Du ${state.filterState.dateFrom.ifBlank { "---" }} Au ${state.filterState.dateTo.ifBlank { "---" }}"
+                                    } else ""
+                                    val serviceText = state.filterState.selectedServiceId?.let { sId ->
+                                        state.services.firstOrNull { it.id == sId }?.name
+                                    } ?: ""
+                                    val filterDesc = listOfNotNull(
+                                        dateRangeText.ifBlank { null },
+                                        if (serviceText.isNotBlank()) "Service: $serviceText" else null,
+                                        if (state.filterState.searchQuery.isNotBlank()) "Recherche: ${state.filterState.searchQuery}" else null
+                                    ).joinToString(" | ")
 
-                                    PdfExporter.generateStockReportPdf(
+                                    val dataSet = ConsumptionExportDataMapper.toExportDataSet(state.filteredItems, filterDesc)
+                                    DocxExporter.generateGenericTableDocx(
                                         filePath = path,
-                                        reportTitle = strings.consumptionTitle,
-                                        dateRange = dateRangeText,
-                                        familiesFilter = familyText,
-                                        serviceFilter = serviceText,
-                                        headers = headers,
-                                        rows = rows
+                                        documentTitle = dataSet.title,
+                                        subtitle = dataSet.subtitle,
+                                        metadata = dataSet.metadata,
+                                        headers = dataSet.headers,
+                                        rows = dataSet.rows
+                                    )
+                                    viewModel.setExportSuccess("Rapport Word généré avec succès : $path")
+                                } catch (e: Exception) {
+                                    viewModel.setExportError("Erreur lors de l'exportation Word : ${e.message ?: "Erreur inconnue"}")
+                                }
+                            }
+                        }
+                    },
+                    onExportPdf = {
+                        if (state.filteredItems.isEmpty()) {
+                            viewModel.setExportError(strings.noConsumptionFound)
+                            return@OperationExportMenu
+                        }
+                        coroutineScope.launch {
+                            val defaultName = "consommation_${state.filterState.dateFrom.ifBlank { "debut" }}_${state.filterState.dateTo.ifBlank { "fin" }}.pdf"
+                            val path = showSaveFileDialog(
+                                title = strings.printReport,
+                                defaultFileName = defaultName,
+                                filters = listOf(FileTypeFilter.PDF)
+                            )
+                            if (path != null) {
+                                try {
+                                    val dateRangeText = if (state.filterState.dateFrom.isNotBlank() || state.filterState.dateTo.isNotBlank()) {
+                                        "Du ${state.filterState.dateFrom.ifBlank { "---" }} Au ${state.filterState.dateTo.ifBlank { "---" }}"
+                                    } else ""
+                                    val serviceText = state.filterState.selectedServiceId?.let { sId ->
+                                        state.services.firstOrNull { it.id == sId }?.name
+                                    } ?: ""
+                                    val filterDesc = listOfNotNull(
+                                        dateRangeText.ifBlank { null },
+                                        if (serviceText.isNotBlank()) "Service: $serviceText" else null,
+                                        if (state.filterState.searchQuery.isNotBlank()) "Recherche: ${state.filterState.searchQuery}" else null
+                                    ).joinToString(" | ")
+
+                                    val dataSet = ConsumptionExportDataMapper.toExportDataSet(state.filteredItems, filterDesc)
+                                    PdfExporter.generateGenericTablePdf(
+                                        filePath = path,
+                                        documentTitle = dataSet.title,
+                                        subtitle = dataSet.subtitle,
+                                        metadata = dataSet.metadata,
+                                        headers = dataSet.headers,
+                                        rows = dataSet.rows
                                     )
                                     viewModel.setExportSuccess("Rapport PDF généré avec succès : $path")
                                 } catch (e: Exception) {
@@ -186,18 +240,8 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
                                 }
                             }
                         }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Print,
-                        contentDescription = strings.printReport,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(strings.printReport)
-                }
+                    }
+                )
             }
         }
 
@@ -676,14 +720,14 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
                                     color = AppTheme.colors.textPrimary
                                 )
                                 Text(
-                                    text = "${formatDzd(item.unitPrice)} DZD",
+                                    text = formatDzd(item.unitPrice),
                                     modifier = Modifier.width(110.dp),
                                     textAlign = TextAlign.End,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
                                 Text(
-                                    text = "${formatDzd(item.totalValue)} DZD",
+                                    text = formatDzd(item.totalValue),
                                     modifier = Modifier.width(130.dp),
                                     textAlign = TextAlign.End,
                                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
@@ -763,7 +807,7 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
                             color = AppTheme.colors.textSecondary
                         )
                         Text(
-                            text = "${formatDzd(state.totalFinancialValueDzd)} DZD",
+                            text = formatDzd(state.totalFinancialValueDzd),
                             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -782,11 +826,3 @@ fun ConsumptionScreen(viewModel: ConsumptionViewModel) {
     }
 }
 
-private fun formatDzd(amount: Double): String {
-    val integerPart = amount.toLong()
-    return integerPart.toString()
-        .reversed()
-        .chunked(3)
-        .joinToString(" ")
-        .reversed()
-}

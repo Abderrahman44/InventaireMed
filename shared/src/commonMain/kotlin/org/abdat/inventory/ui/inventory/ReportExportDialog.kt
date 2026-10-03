@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -50,6 +51,7 @@ import org.abdat.inventory.domain.model.StockArticle
 import org.abdat.inventory.domain.model.categoryLabelsMatch
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DocxExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
@@ -137,7 +139,7 @@ fun ReportExportDialog(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(imageVector = Icons.Default.Print, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
-                    text = "Génération de Rapport & Impression Avancée (SRS-V2)",
+                    text = "Génération de Rapport & Impression Avancée",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -442,6 +444,49 @@ fun ReportExportDialog(
                     Icon(imageVector = Icons.Default.Description, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Exporter CSV (Excel)")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            exportError = null
+                            val defaultName = reportTitle.replace(Regex("[^A-Za-z0-9]"), "_") + ".docx"
+                            val path = showSaveFileDialog(
+                                title = "Exporter Rapport Word (.docx)",
+                                defaultFileName = defaultName,
+                                filters = listOf(FileTypeFilter.DOCX)
+                            )
+                            if (path != null) {
+                                try {
+                                    val (headers, rows) = StockReportDataMapper.toHeadersAndRows(filteredArticles, selectedColumns)
+                                    val meta = linkedMapOf(
+                                        "Service" to selectedServiceFilter,
+                                        "Période" to "$startDateFilter à $endDateFilter",
+                                        "Familles" to familySummaryText,
+                                        "Articles inclus" to "${filteredArticles.size} / ${articles.size}"
+                                    )
+                                    DocxExporter.generateGenericTableDocx(
+                                        filePath = path,
+                                        documentTitle = reportTitle,
+                                        subtitle = "Période : $startDateFilter à $endDateFilter • Service : $selectedServiceFilter",
+                                        metadata = meta,
+                                        headers = headers,
+                                        rows = rows
+                                    )
+                                    exportFormat = "Word"
+                                    exportSuccessPath = path
+                                    showPreviewSuccess = true
+                                    onExportSuccess("Rapport Word exporté avec succès : $path")
+                                } catch (e: Exception) {
+                                    exportError = "Erreur lors de l'export Word : ${e.message ?: "Erreur inconnue"}"
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Icon(imageVector = Icons.Default.Article, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Exporter Word")
                 }
 
                 OutlinedButton(

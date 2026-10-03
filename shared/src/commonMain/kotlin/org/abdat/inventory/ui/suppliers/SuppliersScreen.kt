@@ -73,7 +73,11 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
+import org.abdat.inventory.ui.components.OperationExportMenu
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DocxExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
@@ -130,9 +134,11 @@ fun SuppliersScreen(
             AddArticleToConventionDialog(
                 convention = selectedConv,
                 supplier = selectedSupplier,
+                taxonomy = state.taxonomy,
+                saveError = state.articleSaveError,
                 onDismiss = { viewModel.closeAddArticleDialog() },
-                onConfirm = { des, unit, qty, minQty ->
-                    viewModel.addArticleToConvention(selectedConv.id, des, unit, qty, minQty)
+                onConfirm = { article, quota, minQty ->
+                    viewModel.addArticleToConvention(selectedConv.id, article, quota, minQty)
                 }
             )
         }
@@ -306,17 +312,14 @@ fun SuppliersScreen(
                                 .padding(24.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    "Aucun fournisseur trouvé",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = AppTheme.colors.textSecondary
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                TextButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                                    Text("Réinitialiser les filtres")
+                            EmptyState(
+                                message = "Aucun fournisseur trouvé",
+                                action = {
+                                    TextButton(onClick = { viewModel.onSearchQueryChange("") }) {
+                                        Text("Réinitialiser les filtres")
+                                    }
                                 }
-                            }
+                            )
                         }
                     } else {
                         LazyColumn(
@@ -402,20 +405,21 @@ fun SuppliersScreen(
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
-                                        "Plafond: ${totalCeilingDzd.toLong()} DZD",
+                                        "Plafond: ${formatDzd(totalCeilingDzd)}",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
 
-                                OutlinedButton(
-                                    onClick = {
+                                OperationExportMenu(
+                                    label = "Exporter Dossier",
+                                    onExportCsv = {
                                         coroutineScope.launch {
                                             exportErrorMessage = null
                                             val path = showSaveFileDialog(
                                                 title = "Exporter Conventions CSV",
                                                 defaultFileName = "fournisseur_${selectedSupplier.id}_conventions.csv",
-                                                filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                                                filters = listOf(FileTypeFilter.CSV)
                                             )
                                             if (path != null) {
                                                 try {
@@ -432,26 +436,49 @@ fun SuppliersScreen(
                                             }
                                         }
                                     },
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Description,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Exporter CSV", style = MaterialTheme.typography.labelMedium)
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
+                                    onExportWord = {
+                                        coroutineScope.launch {
+                                            exportErrorMessage = null
+                                            val path = showSaveFileDialog(
+                                                title = "Exporter Dossier Fournisseur Word",
+                                                defaultFileName = "fournisseur_${selectedSupplier.id}_conventions.docx",
+                                                filters = listOf(FileTypeFilter.DOCX)
+                                            )
+                                            if (path != null) {
+                                                try {
+                                                    val (headers, rows) = SupplierExportDataMapper.toSupplierConventionsCsv(
+                                                        supplier = selectedSupplier,
+                                                        conventions = state.conventions,
+                                                        balancesMap = state.conventionBalances
+                                                    )
+                                                    val meta = mapOf(
+                                                        "Fournisseur" to selectedSupplier.societe,
+                                                        "Contact" to selectedSupplier.fullName,
+                                                        "Téléphone" to selectedSupplier.phone,
+                                                        "Total Conventions" to "${state.conventions.size}"
+                                                    )
+                                                    DocxExporter.generateGenericTableDocx(
+                                                        filePath = path,
+                                                        documentTitle = "Dossier Fournisseur - ${selectedSupplier.societe}",
+                                                        subtitle = "Répertoire des conventions-cadres et quotas",
+                                                        metadata = meta,
+                                                        headers = headers,
+                                                        rows = rows
+                                                    )
+                                                    exportSuccessMessage = "Le dossier fournisseur a été exporté en Word (.docx) avec succès.\n\nChemin : $path"
+                                                } catch (e: Exception) {
+                                                    exportErrorMessage = "Erreur lors de l'export Word : ${e.message ?: "Erreur inconnue"}"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onExportPdf = {
                                         coroutineScope.launch {
                                             exportErrorMessage = null
                                             val path = showSaveFileDialog(
                                                 title = "Imprimer / Exporter Dossier PDF",
                                                 defaultFileName = "fournisseur_${selectedSupplier.id}_conventions.pdf",
-                                                filters = listOf(FileTypeFilter("PDF Files", "pdf"))
+                                                filters = listOf(FileTypeFilter.PDF)
                                             )
                                             if (path != null) {
                                                 try {
@@ -467,18 +494,8 @@ fun SuppliersScreen(
                                                 }
                                             }
                                         }
-                                    },
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Print,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Imprimer / PDF", style = MaterialTheme.typography.labelMedium)
-                                }
+                                    }
+                                )
 
                                 Button(
                                     onClick = { viewModel.openSupplierProfile() },
@@ -680,7 +697,7 @@ private fun ConventionsTabView(
 ) {
     if (conventions.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Aucune convention-cadre enregistrée pour ce fournisseur.", color = AppTheme.colors.textSecondary)
+            EmptyState(message = "Aucune convention-cadre enregistrée pour ce fournisseur.")
         }
     } else {
         LazyColumn(
@@ -712,7 +729,7 @@ private fun ConventionsTabView(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Plafond global: ${conv.totalMontant.toLong()} DZD • ${convBalances.size} article(s) • TVA: ${if (conv.tvaRate > 0) "${conv.tvaRate}%" else "0% (Exonéré)"}",
+                                    text = "Plafond global: ${formatDzd(conv.totalMontant)} • ${convBalances.size} article(s) • TVA: ${if (conv.tvaRate > 0) "${conv.tvaRate}%" else "0% (Exonéré)"}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textSecondary
                                 )
@@ -806,7 +823,7 @@ private fun ReferencedArticlesTabView(
 
     if (allItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Aucun article conventionné enregistré.", color = AppTheme.colors.textSecondary)
+            EmptyState(message = "Aucun article conventionné enregistré.")
         }
     } else {
         val tableScrollState = rememberScrollState()
@@ -838,7 +855,7 @@ private fun ReferencedArticlesTabView(
                 ) {
                     Text(item.designation, modifier = Modifier.width(180.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = AppTheme.colors.textPrimary)
                     Text(item.unite, modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text("${item.unitPrice.toLong()} DZD", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(formatDzd(item.unitPrice), modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text("${item.agreedQuantity.toLong()}", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = AppTheme.colors.textPrimary)
                     Text("${item.orderedQuantity.toLong()}", modifier = Modifier.width(100.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(
@@ -858,7 +875,7 @@ private fun ReferencedArticlesTabView(
 private fun HistoryTabView(historyItems: List<SupplierHistoryItem>) {
     if (historyItems.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Aucun mouvement (BC ou BL) répertorié pour ce fournisseur.", color = AppTheme.colors.textSecondary)
+            EmptyState(message = "Aucun mouvement (BC ou BL) répertorié pour ce fournisseur.")
         }
     } else {
         val tableScrollState = rememberScrollState()
@@ -894,7 +911,7 @@ private fun HistoryTabView(historyItems: List<SupplierHistoryItem>) {
                     Text(item.reference, modifier = Modifier.width(180.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.primary)
                     Text(item.type, modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
                     Text(item.date, modifier = Modifier.width(110.dp), style = MaterialTheme.typography.bodySmall, color = AppTheme.colors.textSecondary)
-                    Text("${item.amountDzd.toLong()} DZD", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textPrimary)
+                    Text(formatDzd(item.amountDzd), modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textPrimary)
                     Box(modifier = Modifier.width(110.dp)) {
                         AppBadge(
                             text = item.status,

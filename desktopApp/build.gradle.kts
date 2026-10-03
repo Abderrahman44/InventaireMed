@@ -31,6 +31,7 @@ compose.desktop {
             )
             packageName = "org.abdat.inventory"
             packageVersion = providers.gradleProperty("packageVersion").getOrElse("1.0.0")
+            modules("java.sql", "java.naming", "java.xml")
         }
     }
 }

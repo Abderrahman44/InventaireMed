@@ -1,5 +1,9 @@
 package org.abdat.inventory.ui.suppliers
 
+import org.abdat.inventory.domain.model.CategoryTaxonomy
+import org.abdat.inventory.ui.components.ArticleFormFields
+import org.abdat.inventory.ui.components.ArticleFormValues
+import org.abdat.inventory.ui.components.rememberArticleFormState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -68,8 +72,12 @@ import org.abdat.inventory.domain.model.Fournisseur
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppSearchBar
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.OperationExportMenu
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DocxExporter
 import org.abdat.inventory.util.FileTypeFilter
 import org.abdat.inventory.util.PdfExporter
 import org.abdat.inventory.util.showSaveFileDialog
@@ -177,7 +185,7 @@ fun ConventionDetailScreen(
                                 )
                             }
                             Text(
-                                text = "Fournisseur : ${supplier.fullName} (FRN-${supplier.id.toString().padStart(4, '0')}) • Signée le : ${convention.date} • Plafond : ${convention.totalMontant.toLong()} DZD • TVA : ${convention.tvaRate}%",
+                                text = "Fournisseur : ${supplier.fullName} (FRN-${supplier.id.toString().padStart(4, '0')}) • Signée le : ${convention.date} • Plafond : ${formatDzd(convention.totalMontant)} • TVA : ${convention.tvaRate}%",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = AppTheme.colors.textSecondary
                             )
@@ -188,14 +196,15 @@ fun ConventionDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedButton(
-                            onClick = {
+                        OperationExportMenu(
+                            label = "Exporter Fiche",
+                            onExportCsv = {
                                 coroutineScope.launch {
                                     exportErrorMessage = null
                                     val path = showSaveFileDialog(
                                         title = "Exporter Articles Convention CSV",
                                         defaultFileName = "convention_${convention.ordNumber}_${supplier.id}.csv",
-                                        filters = listOf(FileTypeFilter("CSV Files", "csv"))
+                                        filters = listOf(FileTypeFilter.CSV)
                                     )
                                     if (path != null) {
                                         try {
@@ -212,26 +221,49 @@ fun ConventionDetailScreen(
                                     }
                                 }
                             },
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Description,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Exporter CSV", style = MaterialTheme.typography.labelMedium)
-                        }
-
-                        OutlinedButton(
-                            onClick = {
+                            onExportWord = {
+                                coroutineScope.launch {
+                                    exportErrorMessage = null
+                                    val path = showSaveFileDialog(
+                                        title = "Exporter Fiche Convention Word",
+                                        defaultFileName = "convention_${convention.ordNumber}_${supplier.id}.docx",
+                                        filters = listOf(FileTypeFilter.DOCX)
+                                    )
+                                    if (path != null) {
+                                        try {
+                                            val (headers, rows) = SupplierExportDataMapper.toConventionArticlesCsv(
+                                                convention = convention,
+                                                supplier = supplier,
+                                                balances = balances
+                                            )
+                                            val meta = mapOf(
+                                                "Fournisseur" to supplier.societe,
+                                                "N° Convention" to convention.ordNumber.toString(),
+                                                "Date signature" to convention.date,
+                                                "Plafond Financier" to "${convention.totalMontant} DZD"
+                                            )
+                                            DocxExporter.generateGenericTableDocx(
+                                                filePath = path,
+                                                documentTitle = "Fiche de Convention N° ${convention.ordNumber}",
+                                                subtitle = "Fournisseur : ${supplier.societe} • Plafond : ${convention.totalMontant} DZD",
+                                                metadata = meta,
+                                                headers = headers,
+                                                rows = rows
+                                            )
+                                            exportSuccessMessage = "La fiche de convention a été exportée en Word (.docx) avec succès.\n\nChemin : $path"
+                                        } catch (e: Exception) {
+                                            exportErrorMessage = "Erreur lors de l'export Word : ${e.message ?: "Erreur inconnue"}"
+                                        }
+                                    }
+                                }
+                            },
+                            onExportPdf = {
                                 coroutineScope.launch {
                                     exportErrorMessage = null
                                     val path = showSaveFileDialog(
                                         title = "Imprimer / Exporter Fiche Convention PDF",
                                         defaultFileName = "convention_${convention.ordNumber}_${supplier.id}.pdf",
-                                        filters = listOf(FileTypeFilter("PDF Files", "pdf"))
+                                        filters = listOf(FileTypeFilter.PDF)
                                     )
                                     if (path != null) {
                                         try {
@@ -247,18 +279,8 @@ fun ConventionDetailScreen(
                                         }
                                     }
                                 }
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Print,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Imprimer / PDF", style = MaterialTheme.typography.labelMedium)
-                        }
+                            }
+                        )
 
                         Button(
                             onClick = onOpenAddArticle,
@@ -378,11 +400,7 @@ fun ConventionDetailScreen(
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            "Aucun article trouvé dans cette convention.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AppTheme.colors.textSecondary
-                        )
+                        EmptyState(message = "Aucun article trouvé dans cette convention.")
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -420,7 +438,7 @@ fun ConventionDetailScreen(
                                 )
 
                                 Text(
-                                    "${item.unitPrice.toLong()} DZD",
+                                    formatDzd(item.unitPrice),
                                     modifier = Modifier.width(100.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary
@@ -548,25 +566,19 @@ fun ConventionDetailScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddArticleToConventionDialog(
     convention: Convention,
     supplier: Fournisseur,
+    taxonomy: CategoryTaxonomy,
+    saveError: String?,
     onDismiss: () -> Unit,
-    onConfirm: (designation: String, unite: String, quantity: Double, minQuantity: Double) -> Unit
+    onConfirm: (article: ArticleFormValues, quota: Double, minQuantity: Double) -> Unit
 ) {
-    var designation by remember { mutableStateOf("") }
-    var unite by remember { mutableStateOf("UNITE") }
-    var quantityText by remember { mutableStateOf("") }
+    val form = rememberArticleFormState(article = null, taxonomy = taxonomy)
+    var quotaText by remember { mutableStateOf("") }
     var minQuantityText by remember { mutableStateOf("5") }
-    var isUnitDropdownExpanded by remember { mutableStateOf(false) }
-
-    val standardUnits = listOf("UNITE", "BOITE", "FLACON", "AMPOULE", "PACK", "CARTON", "KIT")
-
-    val quantity = quantityText.toDoubleOrNull() ?: 0.0
-    val minQuantity = minQuantityText.toDoubleOrNull() ?: 5.0
-    val isValid = designation.isNotBlank() && quantity > 0.0
+    var quotaError by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -574,7 +586,7 @@ fun AddArticleToConventionDialog(
             Column {
                 Text(
                     text = "+ Ajouter un Article à la Convention",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = AppTheme.colors.textPrimary
                 )
                 Text(
@@ -588,78 +600,60 @@ fun AddArticleToConventionDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .padding(vertical = 4.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedTextField(
-                    value = designation,
-                    onValueChange = { designation = it },
-                    label = { Text("Désignation de l'article *") },
-                    placeholder = { Text("Ex: Paracétamol 500mg, Sérum Salé...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                ArticleFormFields(state = form, taxonomy = taxonomy)
+
+                Text(
+                    text = "Convention",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = AppTheme.colors.textSecondary
                 )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    ExposedDropdownMenuBox(
-                        expanded = isUnitDropdownExpanded,
-                        onExpandedChange = { isUnitDropdownExpanded = it },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        OutlinedTextField(
-                            value = unite,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Unité *") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isUnitDropdownExpanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = isUnitDropdownExpanded,
-                            onDismissRequest = { isUnitDropdownExpanded = false }
-                        ) {
-                            standardUnits.forEach { u ->
-                                DropdownMenuItem(
-                                    text = { Text(u) },
-                                    onClick = {
-                                        unite = u
-                                        isUnitDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = quantityText,
-                        onValueChange = { if (it.isEmpty() || it.all { char -> char.isDigit() || char == '.' }) quantityText = it },
+                        value = quotaText,
+                        onValueChange = {
+                            if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) {
+                                quotaText = it
+                                quotaError = false
+                            }
+                        },
                         label = { Text("Quota convenu *") },
                         placeholder = { Text("Ex: 500") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
+                        isError = quotaError,
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = minQuantityText,
+                        onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() || c == '.' }) minQuantityText = it },
+                        label = { Text("Seuil d'alerte min") },
+                        placeholder = { Text("Ex: 10") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
-                OutlinedTextField(
-                    value = minQuantityText,
-                    onValueChange = { if (it.isEmpty() || it.all { char -> char.isDigit() || char == '.' }) minQuantityText = it },
-                    label = { Text("Seuil d'alerte min") },
-                    placeholder = { Text("Ex: 10") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
+                if (saveError != null) {
+                    Text(
+                        text = saveError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(designation, unite, quantity, minQuantity) },
-                enabled = isValid,
+                onClick = {
+                    val quota = quotaText.toDoubleOrNull() ?: 0.0
+                    quotaError = quota <= 0.0
+                    val values = form.validate(taxonomy)
+                    if (values == null || quotaError) return@Button
+                    onConfirm(values, quota, minQuantityText.toDoubleOrNull() ?: 5.0)
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("Ajouter à la convention")

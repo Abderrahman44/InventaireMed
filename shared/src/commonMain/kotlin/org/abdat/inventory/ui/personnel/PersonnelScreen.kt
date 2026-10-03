@@ -77,6 +77,7 @@ import org.abdat.inventory.domain.model.Person
 import org.abdat.inventory.domain.model.Service
 import org.abdat.inventory.domain.model.StockArticle
 import org.abdat.inventory.theme.AppTheme
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
 
 @Composable
@@ -302,11 +303,7 @@ fun PersonnelScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "Aucun collaborateur trouvé",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppTheme.colors.textSecondary
-                            )
+                            EmptyState(message = "Aucun collaborateur trouvé")
                         }
                     } else {
                         LazyColumn(
@@ -510,20 +507,10 @@ fun PersonnelScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.Assignment,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(36.dp),
-                                        tint = AppTheme.colors.textSecondary.copy(alpha = 0.4f)
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Aucun matériel actuellement attribué à ce collaborateur.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = AppTheme.colors.textSecondary
-                                    )
-                                }
+                                EmptyState(
+                                    message = "Aucun matériel actuellement attribué à ce collaborateur.",
+                                    icon = Icons.Default.Assignment
+                                )
                             }
                         } else {
                             LazyColumn(

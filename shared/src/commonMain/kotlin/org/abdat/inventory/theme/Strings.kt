@@ -12,6 +12,8 @@ interface AppStrings {
     val appTitle: String
     val appSubtitle: String
     val mainNavigation: String
+    val navOperations: String
+    val navConfiguration: String
     val navInventory: String
     val navSuppliers: String
     val navOrders: String
@@ -134,6 +136,8 @@ object FrStrings : AppStrings {
     override val appTitle = "InventaireMed"
     override val appSubtitle = "Gestion Industrielle & Médicale"
     override val mainNavigation = "MENU PRINCIPAL"
+    override val navOperations = "OPÉRATIONS"
+    override val navConfiguration = "CONFIGURATION"
     override val navInventory = "Gestion de Stock"
     override val navSuppliers = "Fournisseurs"
     override val navOrders = "Commandes"
@@ -256,6 +260,8 @@ object EnStrings : AppStrings {
     override val appTitle = "InventaireMed"
     override val appSubtitle = "Industrial & Medical Inventory"
     override val mainNavigation = "MAIN MENU"
+    override val navOperations = "OPERATIONS"
+    override val navConfiguration = "CONFIGURATION"
     override val navInventory = "Inventory Master"
     override val navSuppliers = "Suppliers"
     override val navOrders = "Purchase Orders"

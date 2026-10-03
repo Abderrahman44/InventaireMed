@@ -70,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.abdat.inventory.domain.model.DynamicConfigItem
+import org.abdat.inventory.domain.model.InstitutionalHeader
 import org.abdat.inventory.theme.AppTheme
 
 @Composable
@@ -201,6 +202,7 @@ fun DynamicConfigScreen(
             ConfigTab.TYPES -> ConfigDropdownsTab(viewModel = viewModel, state = state)
             ConfigTab.THRESHOLDS -> ConfigThresholdsTab(viewModel = viewModel, state = state)
             ConfigTab.PREFIXES -> ConfigPrefixesTab(viewModel = viewModel, state = state)
+            ConfigTab.HEADER -> ConfigInstitutionalHeaderTab(viewModel = viewModel, state = state)
             ConfigTab.PROFILE -> ConfigProfileTab(viewModel = viewModel, state = state)
             ConfigTab.BACKUP -> ConfigBackupTab(viewModel = viewModel, state = state)
         }
@@ -710,7 +712,205 @@ private fun ConfigPrefixesTab(
 }
 
 // ----------------------------------------------------------------------------
-// Tab 4: User Profile
+// Tab: Institutional Export Header (PDF & CSV)
+// ----------------------------------------------------------------------------
+
+@Composable
+private fun ConfigInstitutionalHeaderTab(
+    viewModel: DynamicConfigViewModel,
+    state: DynamicConfigUiState
+) {
+    val currentHeader = state.institutionalHeader
+    var line1 by remember(currentHeader.line1) { mutableStateOf(currentHeader.line1) }
+    var line2 by remember(currentHeader.line2) { mutableStateOf(currentHeader.line2) }
+    var line3 by remember(currentHeader.line3) { mutableStateOf(currentHeader.line3) }
+    var line4 by remember(currentHeader.line4) { mutableStateOf(currentHeader.line4) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = AppTheme.colors.surfaceWhite,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = "En-tête Institutionnel des Documents (PDF & CSV)",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = AppTheme.colors.textPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Configurez les 4 lignes administratives officielles figurant sur chaque rapport PDF imprimé et en tête des exports CSV (tableaux Excel).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppTheme.colors.textSecondary
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    OutlinedTextField(
+                        value = line1,
+                        onValueChange = { line1 = it },
+                        label = { Text("Ligne 1 : Établissement de Santé") },
+                        placeholder = { Text("ex : Établissement Public Hospitalier") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = line2,
+                        onValueChange = { line2 = it },
+                        label = { Text("Ligne 2 : Localité & Wilaya") },
+                        placeholder = { Text("ex : El Attaf, Aïn Defla") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = line3,
+                        onValueChange = { line3 = it },
+                        label = { Text("Ligne 3 : Département / Direction de Rattachement") },
+                        placeholder = { Text("ex : Département des Finances et des Moyens") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = line4,
+                        onValueChange = { line4 = it },
+                        label = { Text("Ligne 4 : Service Gestionnaire") },
+                        placeholder = { Text("ex : Service Magasin Central") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = {
+                            viewModel.saveInstitutionalHeader(
+                                InstitutionalHeader(line1 = line1, line2 = line2, line3 = line3, line4 = line4)
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Enregistrer l'en-tête officiel")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.resetInstitutionalHeader()
+                            line1 = InstitutionalHeader.DEFAULT_LINE_1
+                            line2 = InstitutionalHeader.DEFAULT_LINE_2
+                            line3 = InstitutionalHeader.DEFAULT_LINE_3
+                            line4 = InstitutionalHeader.DEFAULT_LINE_4
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Réinitialiser aux valeurs par défaut")
+                    }
+                }
+            }
+        }
+
+        // Live preview of the header cartouche
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = AppTheme.colors.surfaceWhite,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Aperçu de l'en-tête officiel dans les documents",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = AppTheme.colors.textSecondary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = line1.ifBlank { "Établissement Public Hospitalier" }.uppercase(),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = AppTheme.colors.textPrimary
+                        )
+                        Text(
+                            text = line2.ifBlank { "El Attaf, Aïn Defla" },
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = AppTheme.colors.textSecondary
+                        )
+                        Text(
+                            text = line3.ifBlank { "Département des Finances et des Moyens" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AppTheme.colors.textSecondary
+                        )
+                        Text(
+                            text = line4.ifBlank { "Service Magasin Central" },
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        HorizontalDivider(
+                            modifier = Modifier.fillMaxWidth(0.6f),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Tab 5: User Profile
 // ----------------------------------------------------------------------------
 
 @Composable

@@ -87,7 +87,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testSuppliersViewModelQuotaBalances() {
-        val viewModel = SuppliersViewModel(database)
+        val viewModel = SuppliersViewModel(database, categoryRepo())
         val state = viewModel.uiState.value
 
         assertTrue(state.suppliers.isNotEmpty())
@@ -105,7 +105,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testMultiArticleConventionCreation() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val supplier = suppliersVm.uiState.value.suppliers.first()
         suppliersVm.selectSupplier(supplier)
 
@@ -132,7 +132,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testConventionCreationWithTvaRateAndOrderTaxCalculation() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val supplier = suppliersVm.uiState.value.suppliers.first()
         suppliersVm.selectSupplier(supplier)
 
@@ -323,7 +323,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testAddArticleToExistingConvention() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val supplier = suppliersVm.uiState.value.suppliers.first()
         suppliersVm.selectSupplier(supplier)
 
@@ -335,13 +335,19 @@ class ScreensViewModelTest {
         val initialCount = suppliersVm.uiState.value.conventionBalances[conv.id]?.size ?: 0
 
         // Append new article to the active convention
-        suppliersVm.addArticleToConventionSync(
+        val saved = suppliersVm.addArticleToConventionSync(
             conventionId = conv.id,
-            designation = "Bétadine Dermique 10%",
-            unite = "FLACON",
-            quantity = 400.0,
+            article = betadineForm(),
+            quota = 400.0,
             minQuantity = 20.0
         )
+        assertTrue(saved)
+        // Visible in Gestion de stock: the catalog article exists with its code
+        val stockArticle = database.appDatabaseQueries.selectStockArticleByCode("ART-BETA").executeAsOneOrNull()
+        assertNotNull(stockArticle)
+        assertEquals("Bétadine Dermique 10%", stockArticle.designation)
+        assertEquals(suppliersVm.uiState.value.conventionBalances[conv.id]!!
+            .first { it.designation == "Bétadine Dermique 10%" }.codeArticle, "ART-BETA")
 
         val updatedBalances = suppliersVm.uiState.value.conventionBalances[conv.id]
         assertNotNull(updatedBalances)
@@ -355,9 +361,36 @@ class ScreensViewModelTest {
         assertEquals(20.0, newArticleBalance.minQuantity)
     }
 
+    private fun betadineForm(code: String = "ART-BETA", family: String = "Accessoire informatique", sousFamily: String = "Ordinateurs") =
+        org.abdat.inventory.ui.components.ArticleFormValues(
+            code = code, barcode = "", designation = "Bétadine Dermique 10%", unite = "FLACON",
+            family = family, sousFamily = sousFamily, quantity = 0.0, unitPrice = 0.0, expirationDate = null
+        )
+
+    @Test
+    fun testAddConventionArticleRejectsDuplicateCodeAndInvalidCategory() {
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
+        suppliersVm.selectSupplier(suppliersVm.uiState.value.suppliers.first())
+        val conv = suppliersVm.uiState.value.conventions.first()
+        suppliersVm.selectConventionForDetail(conv)
+        val itemsBefore = database.appDatabaseQueries.selectConventionItemsByConventionId(conv.id).executeAsList().size
+
+        assertTrue(suppliersVm.addArticleToConventionSync(conv.id, betadineForm(), 10.0))
+        val stockBefore = database.appDatabaseQueries.selectAllStockArticles().executeAsList().size
+
+        // Duplicate code writes nothing
+        assertEquals(false, suppliersVm.addArticleToConventionSync(conv.id, betadineForm(), 10.0))
+        assertNotNull(suppliersVm.uiState.value.articleSaveError)
+        // Unconfigured category writes nothing
+        assertEquals(false, suppliersVm.addArticleToConventionSync(conv.id, betadineForm("ART-X", "Inconnue", "Inconnue"), 10.0))
+
+        assertEquals(stockBefore, database.appDatabaseQueries.selectAllStockArticles().executeAsList().size)
+        assertEquals(itemsBefore + 1, database.appDatabaseQueries.selectConventionItemsByConventionId(conv.id).executeAsList().size)
+    }
+
     @Test
     fun testSensitiveEditArticleWorkflow() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val supplier = suppliersVm.uiState.value.suppliers.first()
         suppliersVm.selectSupplier(supplier)
 
@@ -407,7 +440,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testSupplierProfileDetailsInspectionAndSeeding() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val state = suppliersVm.uiState.value
 
         val biopharm = state.suppliers.firstOrNull { it.fullName.contains("BIOPHARM", ignoreCase = true) }
@@ -422,7 +455,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testSupplierProfileNavigationAndEditWorkflow() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val initialSupplier = suppliersVm.uiState.value.suppliers.first()
         suppliersVm.selectSupplier(initialSupplier)
 
@@ -478,7 +511,7 @@ class ScreensViewModelTest {
 
     @Test
     fun testAddSupplierWithFullDetails() {
-        val suppliersVm = SuppliersViewModel(database)
+        val suppliersVm = SuppliersViewModel(database, categoryRepo())
         val initialCount = suppliersVm.uiState.value.suppliers.size
 
         suppliersVm.addSupplierFullSync(
@@ -1351,5 +1384,48 @@ class ScreensViewModelTest {
         assertEquals(10.0, brandNewArticle.quantity)
         assertEquals(0.0, brandNewArticle.unit_price, "Donation article unit_price must strictly be 0.0")
         assertEquals("2030-12-31", brandNewArticle.expiration_date)
+    }
+
+    @Test
+    fun testOperationalViewModelsZeroStateOnEmptyDatabase() {
+        val emptyDriver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        emptyDriver.execute(null, "PRAGMA foreign_keys = ON;", 0)
+        AppDatabase.Schema.create(emptyDriver)
+        val emptyDb = AppDatabase(emptyDriver)
+        ensureCategoryTaxonomy(emptyDb)
+        val emptyStockRepo = StockRepository(emptyDb, Dispatchers.IO)
+
+        // 1. SortiesViewModel on empty DB
+        val sortiesVm = SortiesViewModel(emptyDb, emptyStockRepo)
+        val sortiesState = sortiesVm.uiState.value
+        assertEquals(0, sortiesState.sorties.size)
+        assertEquals(0, sortiesState.todaySortiesCount)
+        assertEquals(0.0, sortiesState.monthlyDistributedDzd)
+        assertEquals(0, sortiesState.activeServicesCount)
+        assertEquals(0, sortiesState.postIssueAlertsCount)
+        assertEquals("BS-2026-001", sortiesState.systemReference)
+        assertEquals("", sortiesState.paperStubReference)
+
+        // 2. DeliveriesViewModel on empty DB
+        val deliveriesVm = DeliveriesViewModel(emptyDb)
+        val deliveriesState = deliveriesVm.uiState.value
+        assertEquals(0, deliveriesState.deliveries.size)
+        assertEquals(0, deliveriesState.plannedDeliveriesCount)
+        assertEquals(0, deliveriesState.conformingDeliveriesCount)
+        assertEquals(0, deliveriesState.inControlDeliveriesCount)
+        assertEquals(0.0, deliveriesState.monthlyVolumeDzd)
+        assertEquals(0, deliveriesState.pendingReconciliationCount)
+        assertEquals("", deliveriesState.paperBlReference)
+
+        // 3. OrdersViewModel on empty DB
+        val ordersVm = OrdersViewModel(emptyDb)
+        val ordersState = ordersVm.uiState.value
+        assertEquals(0, ordersState.orders.size)
+        assertEquals(0, ordersState.activeOrdersCount)
+        assertEquals(0.0, ordersState.totalCommittedDzd)
+        assertEquals(0, ordersState.pendingDeliveriesCount)
+        assertEquals(0, ordersState.strainedConventionsCount)
+
+        emptyDriver.close()
     }
 }

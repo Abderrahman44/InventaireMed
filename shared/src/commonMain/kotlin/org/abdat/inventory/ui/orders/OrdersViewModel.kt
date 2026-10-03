@@ -218,7 +218,7 @@ class OrdersViewModel(
                 activeOrdersCount = activeOrders,
                 totalCommittedDzd = totalCommitted,
                 pendingDeliveriesCount = pendingLivraisons,
-                strainedConventionsCount = 2,
+                strainedConventionsCount = allConventions.size,
                 isLoading = false
             )
         }

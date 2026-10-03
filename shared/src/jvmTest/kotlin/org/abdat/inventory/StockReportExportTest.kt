@@ -130,6 +130,31 @@ class StockReportExportTest {
         tempPdf.inputStream().use { it.read(headerBytes) }
         val headerString = String(headerBytes)
         assertEquals("%PDF-", headerString, "Generated file must start with '%PDF-' magic header")
+
+        val reader = com.lowagie.text.pdf.PdfReader(tempPdf.absolutePath)
+        assertTrue(reader.numberOfPages >= 1, "PDF should have at least 1 page")
+        reader.close()
+
+        // Also verify custom institutional header in PDF export
+        val customHeader = org.abdat.inventory.domain.model.InstitutionalHeader(
+            line1 = "Clinique Spécialisée",
+            line2 = "Ain Defla",
+            line3 = "Direction Médicale",
+            line4 = "Service Logistique"
+        )
+        val customPdf = File.createTempFile("test_custom_pdf_", ".pdf")
+        customPdf.deleteOnExit()
+        PdfExporter.generateStockReportPdf(
+            filePath = customPdf.absolutePath,
+            reportTitle = "Rapport Personnalisé",
+            dateRange = "01/01/2026 à 31/12/2026",
+            familiesFilter = "Toutes",
+            serviceFilter = "Tous",
+            headers = headers,
+            rows = rows,
+            institutionalHeader = customHeader
+        )
+        assertTrue(customPdf.exists() && customPdf.length() > 500)
     }
 
     @Test
@@ -149,10 +174,15 @@ class StockReportExportTest {
 
         assertTrue(tempCsv.exists(), "CSV file must exist")
         val parsed = com.github.doyaaaaaken.kotlincsv.dsl.csvReader().readAll(tempCsv)
-        assertEquals(4, parsed.size, "CSV should contain 1 header line + 3 data rows")
-        assertEquals(listOf("Code Article", "Désignation Article", "Quantité en Stock"), parsed[0])
-        assertEquals(listOf("MED-001", "Paracétamol 500mg", "50"), parsed[1])
-        assertEquals(listOf("CON-001", "Gants Latex", "3"), parsed[2])
-        assertEquals(listOf("MAT-001", "Tensiomètre", "0"), parsed[3])
+        assertEquals(9, parsed.size, "CSV should contain 4 metadata rows + 1 blank row + 1 table header row + 3 data rows")
+        assertEquals(listOf(org.abdat.inventory.domain.model.InstitutionalHeader.DEFAULT_LINE_1, "", ""), parsed[0])
+        assertEquals(listOf(org.abdat.inventory.domain.model.InstitutionalHeader.DEFAULT_LINE_2, "", ""), parsed[1])
+        assertEquals(listOf(org.abdat.inventory.domain.model.InstitutionalHeader.DEFAULT_LINE_3, "", ""), parsed[2])
+        assertEquals(listOf(org.abdat.inventory.domain.model.InstitutionalHeader.DEFAULT_LINE_4, "", ""), parsed[3])
+        assertEquals(listOf("", "", ""), parsed[4])
+        assertEquals(listOf("Code Article", "Désignation Article", "Quantité en Stock"), parsed[5])
+        assertEquals(listOf("MED-001", "Paracétamol 500mg", "50"), parsed[6])
+        assertEquals(listOf("CON-001", "Gants Latex", "3"), parsed[7])
+        assertEquals(listOf("MAT-001", "Tensiomètre", "0"), parsed[8])
     }
 }

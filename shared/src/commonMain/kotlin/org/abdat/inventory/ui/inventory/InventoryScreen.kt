@@ -72,9 +72,11 @@ import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.AppBadge
 import org.abdat.inventory.ui.components.AppFilterTabs
 import org.abdat.inventory.ui.components.AppSearchBar
-import org.abdat.inventory.ui.components.ArticleCategoryPicker
-import org.abdat.inventory.ui.components.rememberArticleCategorySelection
+import org.abdat.inventory.ui.components.ArticleFormFields
+import org.abdat.inventory.ui.components.rememberArticleFormState
+import org.abdat.inventory.ui.components.EmptyState
 import org.abdat.inventory.ui.components.MetricCard
+import org.abdat.inventory.ui.components.formatDzd
 import org.koin.compose.koinInject
 
 @Composable
@@ -285,27 +287,17 @@ fun InventoryScreen(
                     modifier = Modifier.fillMaxSize().padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = AppTheme.colors.textSecondary.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = "Aucun article ne correspond à votre recherche",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = AppTheme.colors.textPrimary
-                        )
-                        Text(
-                            text = "Modifiez vos filtres de statut ou de famille pour élargir les résultats",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.textSecondary
-                        )
-                    }
+                    EmptyState(
+                        message = "Aucun article ne correspond à votre recherche",
+                        icon = Icons.Default.Search,
+                        action = {
+                            Text(
+                                text = "Modifiez vos filtres de statut ou de famille pour élargir les résultats",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textSecondary
+                            )
+                        }
+                    )
                 }
             } else {
                 val tableScrollState = rememberScrollState()
@@ -332,7 +324,7 @@ fun InventoryScreen(
                             Text("Prix Unitaire", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                             Text("Valeur Totale", modifier = Modifier.width(120.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                             Text("Statut", modifier = Modifier.width(110.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
-                            Text("Actions (SRS-V2)", modifier = Modifier.width(90.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
+                            Text("Actions", modifier = Modifier.width(90.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = AppTheme.colors.textSecondary)
                         }
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -522,26 +514,11 @@ private fun AddEditArticleDialog(
     onDismiss: () -> Unit,
     onSave: (String, String, String, String, String, Double, Double, String, String, String?, String) -> Unit
 ) {
-    var code by remember { mutableStateOf(article?.codeArticle ?: "") }
-    var barcode by remember { mutableStateOf(article?.additionalReferenceId ?: "") }
-    var designation by remember { mutableStateOf(article?.designation ?: "") }
-    var unite by remember { mutableStateOf(article?.uniteQuantite ?: "BOITE") }
-    // No default category: creation starts empty; editing preselects only what still resolves.
-    val categorySelection = rememberArticleCategorySelection(
-        family = article?.family ?: "",
-        sousFamily = article?.sousFamily ?: "",
-        taxonomy = taxonomy
-    )
-    var quantityText by remember { mutableStateOf(article?.quantity?.toString() ?: "0") }
-    var priceText by remember { mutableStateOf(article?.unitPrice?.toString() ?: "0") }
-    var expirationDate by remember { mutableStateOf(article?.expirationDate ?: "") }
+    val form = rememberArticleFormState(article, taxonomy)
     var date by remember { mutableStateOf(article?.date ?: "2026-09-09") }
     var reason by remember { mutableStateOf("") }
 
-    var codeError by remember { mutableStateOf(false) }
-    var designationError by remember { mutableStateOf(false) }
     var reasonError by remember { mutableStateOf(false) }
-    var showCategoryErrors by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -558,68 +535,7 @@ private fun AddEditArticleDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it; codeError = false },
-                        label = { Text("Code Article (ex: ART-101)") },
-                        isError = codeError,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = barcode,
-                        onValueChange = { barcode = it },
-                        label = { Text("Réf. Barcode / Fabriquant") },
-                        modifier = Modifier.weight(1.2f)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = designation,
-                    onValueChange = { designation = it; designationError = false },
-                    label = { Text("Désignation de l'Article") },
-                    isError = designationError,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                ArticleCategoryPicker(
-                    taxonomy = taxonomy,
-                    selection = categorySelection,
-                    showErrors = showCategoryErrors,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = unite,
-                        onValueChange = { unite = it },
-                        label = { Text("Unité (Pièce, Boîte, Rame...)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = expirationDate,
-                        onValueChange = { expirationDate = it },
-                        label = { Text("Péremption (YYYY-MM-DD)") },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = quantityText,
-                        onValueChange = { quantityText = it },
-                        label = { Text("Quantité Stock") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = priceText,
-                        onValueChange = { priceText = it },
-                        label = { Text("Prix Unitaire (DZD)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                ArticleFormFields(state = form, taxonomy = taxonomy)
 
                 // If modifying existing article, require justification reason for audit log
                 if (article != null) {
@@ -645,29 +561,23 @@ private fun AddEditArticleDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    codeError = code.isBlank()
-                    designationError = designation.isBlank()
                     if (article != null && reason.isBlank()) {
                         reasonError = true
                     }
-                    val categoryLabels = categorySelection.resolvedLabels(taxonomy)
-                    showCategoryErrors = categoryLabels == null
-                    if (codeError || designationError || reasonError || categoryLabels == null) return@Button
+                    val values = form.validate(taxonomy)
+                    if (values == null || reasonError) return@Button
 
-                    val qty = quantityText.toDoubleOrNull() ?: 0.0
-                    val price = priceText.toDoubleOrNull() ?: 0.0
-                    val exp = expirationDate.ifBlank { null }
                     onSave(
-                        code.trim(),
-                        designation.trim(),
-                        unite.trim(),
-                        categoryLabels.first,
-                        categoryLabels.second,
-                        qty,
-                        price,
+                        values.code,
+                        values.designation,
+                        values.unite,
+                        values.family,
+                        values.sousFamily,
+                        values.quantity,
+                        values.unitPrice,
                         date,
-                        barcode.trim(),
-                        exp,
+                        values.barcode,
+                        values.expirationDate,
                         reason.trim()
                     )
                 }
@@ -681,9 +591,4 @@ private fun AddEditArticleDialog(
             }
         }
     )
-}
-
-private fun formatDzd(amount: Double): String {
-    val rounded = amount.toLong()
-    return "$rounded DZD"
 }

@@ -60,6 +60,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import org.abdat.inventory.domain.model.CategoryTaxonomy
 import org.abdat.inventory.ui.components.ArticleCategoryPicker
+import org.abdat.inventory.ui.components.EmptyState
+import org.abdat.inventory.ui.components.formatDzd
 import org.abdat.inventory.ui.components.rememberArticleCategorySelection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,6 +74,17 @@ import org.abdat.inventory.domain.model.StockArticle
 import org.abdat.inventory.theme.AppTheme
 import org.abdat.inventory.ui.components.MetricCard
 
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import org.abdat.inventory.ui.components.OperationExportDialogs
+import org.abdat.inventory.ui.components.OperationExportMenu
+import org.abdat.inventory.util.CsvExporter
+import org.abdat.inventory.util.DechargesExportDataMapper
+import org.abdat.inventory.util.DocxExporter
+import org.abdat.inventory.util.FileTypeFilter
+import org.abdat.inventory.util.PdfExporter
+import org.abdat.inventory.util.showSaveFileDialog
+
 @Composable
 fun DechargeScreen(
     viewModel: DechargeViewModel,
@@ -79,6 +92,9 @@ fun DechargeScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val strings = AppTheme.strings
+    val coroutineScope = rememberCoroutineScope()
+    var exportSuccessPath by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -122,21 +138,104 @@ fun DechargeScreen(
                             color = AppTheme.colors.textPrimary
                         )
                         Text(
-                            text = "Réception de subventions étatiques, dons et legs sans incidence budgétaire (SRS-V2)",
+                            text = "Réception de subventions étatiques, dons et legs sans incidence budgétaire",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.colors.textSecondary
                         )
                     }
                 }
 
-                Button(
-                    onClick = { viewModel.openCreateDialog() },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(strings.newDecharge)
+                    OperationExportMenu(
+                        label = "Exporter",
+                        onExportCsv = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Décharges CSV",
+                                    defaultFileName = "registre_decharges.csv",
+                                    filters = listOf(FileTypeFilter.CSV)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val dataSet = DechargesExportDataMapper.toExportDataSet(state.decharges)
+                                        CsvExporter.writeCsv(path, dataSet.headers, dataSet.rows)
+                                        exportSuccessPath = path
+                                        exportError = null
+                                    } catch (e: Exception) {
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export CSV"
+                                        exportSuccessPath = null
+                                    }
+                                }
+                            }
+                        },
+                        onExportWord = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Décharges Word",
+                                    defaultFileName = "registre_decharges.docx",
+                                    filters = listOf(FileTypeFilter.DOCX)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val dataSet = DechargesExportDataMapper.toExportDataSet(state.decharges)
+                                        DocxExporter.generateGenericTableDocx(
+                                            filePath = path,
+                                            documentTitle = dataSet.title,
+                                            subtitle = dataSet.subtitle,
+                                            metadata = dataSet.metadata,
+                                            headers = dataSet.headers,
+                                            rows = dataSet.rows
+                                        )
+                                        exportSuccessPath = path
+                                        exportError = null
+                                    } catch (e: Exception) {
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export Word"
+                                        exportSuccessPath = null
+                                    }
+                                }
+                            }
+                        },
+                        onExportPdf = {
+                            coroutineScope.launch {
+                                val path = showSaveFileDialog(
+                                    title = "Exporter Registre Décharges PDF",
+                                    defaultFileName = "registre_decharges.pdf",
+                                    filters = listOf(FileTypeFilter.PDF)
+                                )
+                                if (path != null) {
+                                    try {
+                                        val dataSet = DechargesExportDataMapper.toExportDataSet(state.decharges)
+                                        PdfExporter.generateGenericTablePdf(
+                                            filePath = path,
+                                            documentTitle = dataSet.title,
+                                            subtitle = dataSet.subtitle,
+                                            metadata = dataSet.metadata,
+                                            headers = dataSet.headers,
+                                            rows = dataSet.rows
+                                        )
+                                        exportSuccessPath = path
+                                        exportError = null
+                                    } catch (e: Exception) {
+                                        exportError = e.message ?: "Erreur inconnue lors de l'export PDF"
+                                        exportSuccessPath = null
+                                    }
+                                }
+                            }
+                        }
+                    )
+
+                    Button(
+                        onClick = { viewModel.openCreateDialog() },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(strings.newDecharge)
+                    }
                 }
             }
         }
@@ -175,7 +274,7 @@ fun DechargeScreen(
             )
             MetricCard(
                 title = "Impact Budgétaire DZD",
-                value = "0.00 DZD",
+                value = formatDzd(0.0),
                 subtitle = "Strictement neutre",
                 icon = Icons.Default.Info,
                 accentColor = AppTheme.colors.statusSuccess,
@@ -211,7 +310,7 @@ fun DechargeScreen(
                     }
                 } else if (state.decharges.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Aucun papier de décharge enregistré", color = AppTheme.colors.textSecondary)
+                        EmptyState(message = "Aucun papier de décharge enregistré")
                     }
                 } else {
                     LazyColumn(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -236,7 +335,7 @@ fun DechargeScreen(
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                             color = MaterialTheme.colorScheme.primary
                                         )
-                                        StatusChip(type = StatusType.SUCCESS, text = "0.00 DZD")
+                                        StatusChip(type = StatusType.SUCCESS, text = formatDzd(0.0))
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
@@ -340,7 +439,7 @@ fun DechargeScreen(
                                                 color = AppTheme.colors.statusSuccess
                                             )
                                             Text(
-                                                text = "0.00 DZD",
+                                                text = formatDzd(0.0),
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = AppTheme.colors.textSecondary
                                             )
@@ -367,6 +466,15 @@ fun DechargeScreen(
             }
         )
     }
+
+    // Export Feedback Dialogs
+    OperationExportDialogs(
+        successPath = exportSuccessPath,
+        errorMessage = exportError,
+        itemCount = state.decharges.size,
+        onDismissSuccess = { exportSuccessPath = null },
+        onDismissError = { exportError = null }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -475,7 +583,7 @@ private fun CreateDechargeDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = "Valorisation financière strictement nulle : 0.00 DZD (Don / Dotation non facturée)",
+                            text = "Valorisation financière strictement nulle : ${formatDzd(0.0)} (Don / Dotation non facturée)",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -674,7 +782,7 @@ private fun CreateDechargeDialog(
                                     )
                                     val expInfo = if (!line.expirationDate.isNullOrBlank()) " • Exp: ${line.expirationDate}" else ""
                                     Text(
-                                        text = "Prix: 0.00 DZD (Don)$expInfo",
+                                        text = "Prix: ${formatDzd(0.0)} (Don)$expInfo",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = AppTheme.colors.textSecondary
                                     )

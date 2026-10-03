@@ -35,7 +35,7 @@ data class DeliveryVerificationLine(
     val remainingQuantity: Double = (orderedQuantity - previouslyDeliveredQuantity).coerceAtLeast(0.0),
     val receivedQuantity: Double = remainingQuantity,
     val lotNumber: String = "",
-    val targetLocation: String = "Pharmacie Centrale - Réserve Générale",
+    val targetLocation: String = "",
     val unitPrice: Double = 0.0,
     val qualityCheckStatus: String = "Visuel OK"
 ) {
@@ -53,9 +53,9 @@ data class DeliveryDisplayItem(
     val commandeReference: String,
     val supplierName: String,
     val supplierConvention: String,
-    val destinationStock: String = "Pharmacie Centrale / Stock Général",
-    val serviceName: String = "Pharmacie Centrale",
-    val beneficiaireName: String = "Personnel non spécifié",
+    val destinationStock: String = "Stock Général",
+    val serviceName: String = "Non assigné",
+    val beneficiaireName: String = "Non spécifié",
     val chefDeServiceName: String = "",
     val dateLivraison: String,
     val itemsCount: Int,
@@ -83,8 +83,8 @@ data class DeliveriesUiState(
     val activeAnomaliesCount: Int = 0,
     
     // Inbound Form fields
-    val paperBlReference: String = "BL-SCH-994182",
-    val receptionDate: String = "2026-09-08",
+    val paperBlReference: String = "",
+    val receptionDate: String = "",
     val availableCommandes: ImmutableList<BonDeCommande> = persistentListOf(),
     val selectedCommandeId: Long? = null,
     val selectedCommandeReference: String = "",
@@ -257,11 +257,10 @@ class DeliveriesViewModel(
                 availableBeneficiaries = serviceStaff.toImmutableList(),
                 selectedBeneficiaryId = initialBeneficiaryId,
                 selectedBeneficiaryName = initialBeneficiaryName,
-                chefDeServiceName = initialChefName,
-                plannedDeliveriesCount = (displayItems.size + pendingCommandes.size).coerceAtLeast(4),
-                conformingDeliveriesCount = displayItems.size.coerceAtLeast(3),
-                inControlDeliveriesCount = pendingCommandes.size.coerceAtLeast(1),
-                monthlyVolumeDzd = totalVolume.takeIf { it > 0 } ?: 14850000.0,
+                plannedDeliveriesCount = displayItems.size + pendingCommandes.size,
+                conformingDeliveriesCount = displayItems.size,
+                inControlDeliveriesCount = pendingCommandes.size,
+                monthlyVolumeDzd = totalVolume,
                 pendingReconciliationCount = pendingCommandes.size,
                 activeAnomaliesCount = if (current.verificationLines.any { it.isDeficit }) 1 else 0,
                 isLoading = false
@@ -317,13 +316,9 @@ class DeliveriesViewModel(
             deliveredQtyMap[key] = (deliveredQtyMap[key] ?: 0.0) + d.quantity
         }
 
-        val verificationLines = dbItems.mapIndexed { index, item ->
-            val defaultLoc = when {
-                item.family.contains("Matériel", ignoreCase = true) -> "Allée B • C07"
-                item.family.contains("Consommable", ignoreCase = true) -> "Allée A • R02"
-                else -> "Allée B • C04"
-            }
-            val defaultLot = "LT-24${(10 + index)}-" + (item.code_article.takeLast(3).ifBlank { "001" })
+        val verificationLines = dbItems.map { item ->
+            val defaultLoc = "Magasin Principal / Réserve"
+            val defaultLot = ""
 
             val key = if (item.code_article.isNotBlank()) item.code_article.lowercase().trim() else item.designation.lowercase().trim()
             val prevDelivered = deliveredQtyMap[key] ?: 0.0

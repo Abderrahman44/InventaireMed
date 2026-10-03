@@ -7,6 +7,7 @@ import org.abdat.inventory.database.DatabaseDriverFactory
 import org.abdat.inventory.database.createDatabase
 import org.abdat.inventory.database.ensureCategoryTaxonomy
 import org.abdat.inventory.data.repository.CategoryRepository
+import org.abdat.inventory.data.repository.ConfigRepository
 import org.abdat.inventory.data.repository.StockRepository
 import org.abdat.inventory.ui.config.DynamicConfigViewModel
 import org.abdat.inventory.ui.consumption.ConsumptionViewModel
@@ -39,18 +40,19 @@ val databaseModule = module {
 val repositoryModule = module {
     single { StockRepository(get(), get()) }
     single { CategoryRepository(get(), get()) }
+    single { ConfigRepository(get()) }
 }
 
 val viewModelModule = module {
     single { InventoryViewModel(get(), get(), get()) }
-    single { SuppliersViewModel(get()) }
+    single { SuppliersViewModel(get(), get()) }
     single { OrdersViewModel(get()) }
     single { DeliveriesViewModel(get()) }
     single { SortiesViewModel(get(), get()) }
     single { ServicesViewModel(get()) }
     single { DechargeViewModel(get(), get()) }
     single { PersonnelViewModel(get()) }
-    single { DynamicConfigViewModel(get(), get(), getOrNull<DatabaseBackupService>()) }
+    single { DynamicConfigViewModel(get(), get(), getOrNull<DatabaseBackupService>(), get()) }
     single { ArticleDetailViewModel(get(), get()) }
     single { ConsumptionViewModel(get(), get(), get()) }
 }
