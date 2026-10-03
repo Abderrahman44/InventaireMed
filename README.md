@@ -1,3 +1,68 @@
+<p align="center">
+  <img src="docs/logos/eph-el-attaf.jpg" alt="EPH El Attaf" height="130">
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/logos/esi-sba.jpg" alt="ESI Sidi-Bel-Abbès" height="130">
+</p>
+
+<h1 align="center">InventaireMed</h1>
+
+<p align="center"><em>Gestion de Stock — hospital inventory management, desktop application</em></p>
+
+## About
+
+**InventaireMed** is a desktop inventory and stock management application (*Gestion de Stock*) designed for hospitals and healthcare institutions. It was developed during an internship at the **EPH El Attaf** public hospital (Ministry of Health) as a project of the **École Supérieure en Informatique de Sidi-Bel-Abbès (ESI-SBA)**.
+
+It centralizes the management of all hospital stock, from pharmaceuticals and medical supplies to IT equipment and office materials, and tracks the whole flow from supplier conventions and purchase orders, through deliveries, to internal issues and consumption by service. The interface is available in French and English, with light and dark themes.
+
+> 📄 Full requirements: see the [**Software Requirements Specification**](./docs/SRS_FINAL.md) in the [`docs`](./docs) folder.
+
+### Key features
+
+- **Stock management**: articles organized by family and sub-family (managed in the configuration screen), with quantities, expiration dates and unit prices.
+- **Suppliers & conventions**: supplier profiles and purchase agreements, with optional TVA (VAT) applied automatically to orders.
+- **Orders (Commandes)**: order tracking with detail views showing delivered and partially pending lines.
+- **Deliveries (Bons de livraison)** and **issue slips (Bons de sortie)**: incoming and outgoing stock movements with beneficiary, requester and receiver traceability.
+- **Consumption tracking**: analytics of articles consumed by internal services, filterable by date, service and category, with printable reports.
+- **Donations**: incoming stock with no unit price.
+- **Personnel & services**: staff directory, services/premises and heads of service.
+- **Audit log, exports & backups**: history of operations, report/document export and database backup.
+
+### Screenshots
+
+| Stock management | Consumption |
+|---|---|
+| ![Stock management](docs/screenshots/01-stock-management.png) | ![Consumption](docs/screenshots/02-consumption.png) |
+
+| Suppliers & conventions | Orders |
+|---|---|
+| ![Suppliers and conventions](docs/screenshots/03-suppliers-conventions.png) | ![Orders](docs/screenshots/04-orders.png) |
+
+| Deliveries | Issue notes |
+|---|---|
+| ![Deliveries](docs/screenshots/05-deliveries.png) | ![Issue notes](docs/screenshots/06-issue-notes.png) |
+
+| Donations | Services & locals |
+|---|---|
+| ![Donations](docs/screenshots/07-donations.png) | ![Services and locals](docs/screenshots/08-services-locals.png) |
+
+| Personnel | Configuration |
+|---|---|
+| ![Personnel](docs/screenshots/09-personnel.png) | ![Configuration](docs/screenshots/10-configuration.png) |
+
+| User profile (dark mode) | Sensitive convention edit |
+|---|---|
+| ![User profile](docs/screenshots/11-user-profile-dark-mode.png) | ![Convention edit warning](docs/screenshots/12-convention-edit-warning.png) |
+
+Each screen is described in detail in the [SRS](./docs/SRS_FINAL.md).
+
+### Tech stack
+
+- Kotlin Multiplatform and Compose Multiplatform (Material 3) for the UI, targeting Desktop (JVM)
+- SQLDelight with SQLite for local persistence
+- Koin for dependency injection
+
+---
+
 This is a Kotlin Multiplatform project targeting Desktop (JVM).
 
 * [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications. It contains
