@@ -32,6 +32,14 @@ compose.desktop {
             packageName = "org.abdat.inventory"
             packageVersion = providers.gradleProperty("packageVersion").getOrElse("1.0.0")
             modules("java.sql", "java.naming", "java.xml")
+
+            windows {
+                upgradeUuid = "8a7b9c1d-2e3f-4a5b-6c7d-8e9f0a1b2c3d"
+                menuGroup = "InventaireMed"
+                shortcut = true
+                perUserInstall = false
+                dirChooser = false
+            }
         }
     }
 }
